@@ -23,6 +23,11 @@ app.get("/api/test", (req, res) => {
     res.json({ message: "API is working!" });
 });
 
+app.use("/api/auth", require("./routes/authRoutes"));
+app.use("/api/tenants", require("./routes/tenantRoutes"));
+app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/properties", require("./routes/propertyRoutes"));
+app.use("/api/invoices", require("./routes/invoiceRoutes"));
 
 // Server Listening
 const PORT = process.env.PORT || 5001;
