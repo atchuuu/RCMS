@@ -1,34 +1,27 @@
-require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const listEndpoints = require("express-list-endpoints");
+
+const invoiceRoutes = require("./routes/invoiceRoutes");
 
 const app = express();
-
-// Middleware
 app.use(express.json());
 app.use(cors());
 
 mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => console.error("❌ MongoDB Connection Error:", err));
+  .connect("mongodb://127.0.0.1:27017/rentalDB", {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
 
-// Sample Route
-app.get("/", (req, res) => {
-  res.send("Backend is running...");
-});
+app.use("/api/invoices", invoiceRoutes);
 
-app.get("/api/test", (req, res) => {
-    res.json({ message: "API is working!" });
-});
+// Debugging: Print all routes
+console.log(listEndpoints(app));
 
-app.use("/api/auth", require("./routes/authRoutes"));
-app.use("/api/tenants", require("./routes/tenantRoutes"));
-app.use("/api/admin", require("./routes/adminRoutes"));
-app.use("/api/properties", require("./routes/propertyRoutes"));
-app.use("/api/invoices", require("./routes/invoiceRoutes"));
 
-// Server Listening
-const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = 5000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
