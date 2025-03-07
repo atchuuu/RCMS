@@ -1,72 +1,90 @@
 const express = require("express");
 const router = express.Router();
 const Invoice = require("../models/Invoice");
-const { sendInvoiceWhatsApp } = require("../services/whatsappService");
 const { generateInvoicePDF } = require("../services/invoiceGenerator");
 const Tenant = require("../models/Tenant");
-// 🟢 Generate and Send Invoice
 
-router.post("/generate", async (req, res) => {
+// 🟢 Generate and Save Invoice
+router.post('/generate', async (req, res) => {
     try {
-        console.log("📩 Received POST request:", req.body);
+        const { pgId, roomNo, pgName, tenantName, amountDue, dueDate, upiId } = req.body;
 
-        const { tenantId, amountDue, dueDate, upiId, qrCodeData } = req.body;
-
-        if (!tenantId || !amountDue || !dueDate || !upiId || !qrCodeData) {
-            console.error("🚨 Missing fields in request:", req.body);
-            return res.status(400).json({ error: "All fields are required" });
+        if (!pgId || !roomNo || !pgName || !tenantName || !amountDue || !dueDate || !upiId) {
+            return res.status(400).json({ success: false, message: "All fields are required!" });
         }
 
-        const newInvoice = new Invoice({
-            tenantId,
+        const qrCodePath = "/assets/upi_qr.png"; // Default QR Code image path
+
+        const invoice = new Invoice({
+            pgId,
+            roomNo,
+            pgName,
+            tenantName, // ✅ Added tenant name
             amountDue,
             dueDate,
             upiId,
-            qrCodeData,
-            status: "Pending",
+            qrCodeImage: qrCodePath,
+            status: 'Pending'
         });
 
-        await newInvoice.save();
+        await invoice.save();
+        
+        console.log("✅ Invoice saved, now generating PDF...");
+        const pdfPath = await generateInvoicePDF(invoice);
 
-        console.log("✅ Invoice saved successfully:", newInvoice);
-
-        res.json({ success: true, message: "Invoice generated and saved!", invoice: newInvoice });
+        res.status(201).json({
+            success: true,
+            message: "Invoice generated and saved!",
+            invoice,
+            pdfPath
+        });
 
     } catch (error) {
-        console.error("🔥 Error generating invoice:", error);
-        res.status(500).json({ success: false, message: "Server error", error: error.message });
+        console.error("❌ Error generating invoice:", error);
+        res.status(500).json({ success: false, message: "Server error!" });
     }
 });
 
 
-
-// 🟢 Get All Invoices
+// ✅ Get All Invoices
 router.get("/", async (req, res) => {
     try {
         const invoices = await Invoice.find();
-        res.json(invoices);
+        res.status(200).json({ success: true, invoices });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching invoices" });
+        res.status(500).json({ success: false, message: "Server error!" });
     }
 });
 
-// 🟢 Get Invoice by Tenant ID
-router.get("/:tenantId", async (req, res) => {
+// ✅ Get Invoices by PG ID & Room No
+router.get("/:pgId/:roomNo", async (req, res) => {
     try {
-        const invoices = await Invoice.find({ tenantId: Number(req.params.tenantId) });
-        res.json(invoices);
+        const { pgId, roomNo } = req.params;
+        const invoices = await Invoice.find({ pgId, roomNo });
+
+        if (!invoices.length) {
+            return res.status(404).json({ success: false, message: "No invoices found!" });
+        }
+
+        res.status(200).json({ success: true, invoices });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching invoices" });
+        res.status(500).json({ success: false, message: "Server error!" });
     }
 });
 
-// 🟢 Mark Invoice as Paid
+// ✅ Mark Invoice as Paid
 router.put("/:invoiceId/mark-paid", async (req, res) => {
     try {
+        const { invoiceId } = req.params;
         const { utrNumber, paymentScreenshot } = req.body;
-        const invoice = await Invoice.findById(req.params.invoiceId);
+
+        if (!utrNumber || !paymentScreenshot) {
+            return res.status(400).json({ success: false, message: "UTR number and payment screenshot are required!" });
+        }
+
+        const invoice = await Invoice.findById(invoiceId);
         if (!invoice) {
-            return res.status(404).json({ message: "Invoice not found" });
+            return res.status(404).json({ success: false, message: "Invoice not found!" });
         }
 
         invoice.status = "Paid";
@@ -74,31 +92,28 @@ router.put("/:invoiceId/mark-paid", async (req, res) => {
         invoice.paymentScreenshot = paymentScreenshot;
         await invoice.save();
 
-        res.json({ success: true, message: "Invoice marked as paid!" });
+        res.status(200).json({ success: true, message: "Invoice marked as paid!", invoice });
     } catch (error) {
-        res.status(500).json({ message: "Error updating invoice" });
+        res.status(500).json({ success: false, message: "Server error!" });
     }
 });
+
+// ✅ Calculate and Update Invoices for All Tenants
 router.put("/calculate-invoices", async (req, res) => {
     try {
-      const tenants = await Tenant.find();
-  
-      for (const tenant of tenants) {
-        // Calculate Electricity Bill
-        const electricityBill = tenant.electricityPresentMonth - tenant.electricityPastMonth;
-        
-        // Calculate Total Amount Due
-        tenant.dueElectricityBill = electricityBill;
-        tenant.totalAmountDue = tenant.rent + tenant.maintenanceAmount + electricityBill;
-  
-        // Save the updated tenant
-        await tenant.save();
-      }
-  
-      res.json({ success: true, message: "Invoices calculated and updated!" });
+        const tenants = await Tenant.find();
+
+        for (const tenant of tenants) {
+            const electricityBill = tenant.electricityPresentMonth - tenant.electricityPastMonth;
+            tenant.dueElectricityBill = electricityBill;
+            tenant.totalAmountDue = tenant.rent + tenant.maintenanceAmount + electricityBill;
+            await tenant.save();
+        }
+
+        res.json({ success: true, message: "Invoices calculated and updated!" });
     } catch (error) {
-      res.status(500).json({ message: "Error calculating invoices", error });
+        res.status(500).json({ success: false, message: "Error calculating invoices" });
     }
-  });
-  
+});
+
 module.exports = router;

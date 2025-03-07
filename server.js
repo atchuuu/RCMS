@@ -5,10 +5,12 @@ const listEndpoints = require("express-list-endpoints");
 const invoiceRoutes = require("./routes/invoiceRoutes");
 const tenantRoutes = require("./routes/tenantRoutes");
 const app = express();
+const path = require("path");
 app.use(express.json());
 app.use(cors());
 app.use("/api/tenants", tenantRoutes);
 app.use("/api/invoices", invoiceRoutes);
+app.use("/assets", express.static(path.join(__dirname, ".assets")));
 mongoose.connect("mongodb://127.0.0.1:27017/rentalDB", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
