@@ -1,12 +1,13 @@
 const mongoose = require("mongoose");
 
 const pgSchema = new mongoose.Schema({
-    pgName: { type: String, required: true },
+    pgId: { type: String, required: true, unique: true }, // Custom PG ID
+    name: { type: String, required: true },
+    rent: {type:Number, default:0},
     address: { type: String, required: true },
     ownerName: { type: String, required: true },
     contact: { type: String, required: true },
-    totalRooms: { type: Number, required: true },
-    vacantRooms: { type: Number, required: true, default: 0 } // New field
+    vacantRooms: { type: Number, default: 0 } // Added vacant rooms field
 });
 
 module.exports = mongoose.model("PG", pgSchema);

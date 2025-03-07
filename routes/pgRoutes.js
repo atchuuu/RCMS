@@ -1,5 +1,5 @@
 const express = require("express");
-const { addPG, getAllPGs, updatePG, deletePG } = require("../controllers/pgController");
+const { addPG, getAllPGs, getPGById, updatePG, deletePG } = require("../controllers/pgController");
 
 const router = express.Router();
 
@@ -9,10 +9,13 @@ router.post("/add", addPG);
 // Route to get all PGs
 router.get("/all", getAllPGs);
 
-// Route to update a PG by ID
-router.put("/update/:id", updatePG);
+// Route to get a PG by pgId
+router.get("/:pgId", getPGById);
 
-// Route to delete a PG by ID
-router.delete("/delete/:id", deletePG);
+// Route to update a PG by pgId
+router.put("/update/:pgId", updatePG);
+
+// Route to delete a PG by pgId
+router.delete("/delete/:pgId", deletePG);
 
 module.exports = router;

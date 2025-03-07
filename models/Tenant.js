@@ -1,20 +1,28 @@
 const mongoose = require("mongoose");
 
 const TenantSchema = new mongoose.Schema({
-  tid: { type: Number, unique: true, required: true }, // Tenant ID
-  tname: { type: String, required: true }, // Tenant Name
-  mobileNumber: { type: String, required: true }, // Mobile Number
-  pgName: { type: String, required: true }, // PG Name
-  roomNo: { type: String, required: true }, // Room Number
-  rent: { type: Number, required: true }, // Rent Amount
-  documentsUploaded: { type: Boolean, default: false }, // Document Upload Status
-  idCardUploaded: { type: Boolean, default: false }, // ID Card Upload Status
-  securityAmount: { type: Number, required: true }, // Security Deposit
-  maintenanceAmount: { type: Number, required: true, default: 500 }, // Fixed Maintenance Fee
-  electricityPastMonth: { type: Number, default: 0 }, // Previous Month Electricity Reading
-  electricityPresentMonth: { type: Number, default: 0 }, // Current Month Electricity Reading
-  dueElectricityBill: { type: Number, default: 0 }, // Electricity Bill Due
-  totalAmountDue: { type: Number, default: 0 } // Total Amount Due (Rent + Maintenance + Electricity)
+  tid: { type: Number, unique: true, required: true },
+  tname: { type: String, required: true },
+  mobileNumber: { type: String, required: true },
+  pgName: { type: String, required: true },
+  roomNo: { type: String, required: true },
+  rent: { type: Number, required: true },
+  documentsUploaded: { type: Boolean, default: false },
+  idCardUploaded: { type: Boolean, default: false },
+  securityAmount: { type: Number, required: true },
+  maintenanceAmount: { type: Number, required: true, default: 500 },
+  electricityPastMonth: { type: Number, default: 0 },
+  electricityPresentMonth: { type: Number, default: 0 },
+  dueElectricityBill: { type: Number, default: 0 },
+  totalAmountDue: { type: Number, default: 0 },
+  transactions: [
+    {
+      date: { type: Date, default: Date.now },
+      amount: { type: Number, required: true },
+      utrNumber: { type: String, required: true },
+      status: { type: String, enum: ["Paid", "Pending"], default: "Paid" },
+    }
+  ]
 }, { timestamps: true });
 
 module.exports = mongoose.model("Tenant", TenantSchema);

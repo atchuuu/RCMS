@@ -1,51 +1,31 @@
 const express = require("express");
-const Tenant = require("../models/Tenant");
+const {
+    addTenant,
+    getAllTenants,
+    updateTenant,
+    deleteTenant,
+    getTenantTransactions,
+    getTenantDashboard
+} = require("../controllers/tenantController");
 
 const router = express.Router();
 
 // 🟢 **1. Add a new tenant**
-router.post("/add", async (req, res) => {
-  try {
-    const newTenant = new Tenant(req.body);
-    await newTenant.save();
-    res.status(201).json({ success: true, message: "Tenant added successfully!", tenant: newTenant });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Error adding tenant", error });
-  }
-});
+router.post("/add", addTenant);
 
 // 🔵 **2. Get all tenants**
-router.get("/", async (req, res) => {
-  try {
-    const tenants = await Tenant.find();
-    res.status(200).json(tenants);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching tenants" });
-  }
-});
+router.get("/", getAllTenants);
 
 // 🟡 **3. Update tenant details**
-router.put("/update/:tid", async (req, res) => {
-  try {
-    const { tid } = req.params;
-    const updatedTenant = await Tenant.findOneAndUpdate({ tid }, req.body, { new: true });
-    if (!updatedTenant) return res.status(404).json({ message: "Tenant not found" });
-    res.json({ success: true, message: "Tenant updated successfully", tenant: updatedTenant });
-  } catch (error) {
-    res.status(500).json({ message: "Error updating tenant" });
-  }
-});
+router.put("/update/:tid", updateTenant);
 
 // 🔴 **4. Delete a tenant**
-router.delete("/delete/:tid", async (req, res) => {
-  try {
-    const { tid } = req.params;
-    const deletedTenant = await Tenant.findOneAndDelete({ tid });
-    if (!deletedTenant) return res.status(404).json({ message: "Tenant not found" });
-    res.json({ success: true, message: "Tenant deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ message: "Error deleting tenant" });
-  }
-});
+router.delete("/delete/:tid", deleteTenant);
+
+// 🟣 **5. Get past transactions of a tenant**
+router.get("/:tid/transactions", getTenantTransactions);
+
+// 🟠 **6. Get tenant dashboard**
+router.get("/dashboard", getTenantDashboard);
 
 module.exports = router;
