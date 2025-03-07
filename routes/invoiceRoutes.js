@@ -3,7 +3,7 @@ const router = express.Router();
 const Invoice = require("../models/Invoice");
 const { sendInvoiceWhatsApp } = require("../services/whatsappService");
 const { generateInvoicePDF } = require("../services/invoiceGenerator");
-
+const Tenant = require("../models/Tenant");
 // 🟢 Generate and Send Invoice
 
 router.post("/generate", async (req, res) => {
@@ -79,5 +79,26 @@ router.put("/:invoiceId/mark-paid", async (req, res) => {
         res.status(500).json({ message: "Error updating invoice" });
     }
 });
-
+router.put("/calculate-invoices", async (req, res) => {
+    try {
+      const tenants = await Tenant.find();
+  
+      for (const tenant of tenants) {
+        // Calculate Electricity Bill
+        const electricityBill = tenant.electricityPresentMonth - tenant.electricityPastMonth;
+        
+        // Calculate Total Amount Due
+        tenant.dueElectricityBill = electricityBill;
+        tenant.totalAmountDue = tenant.rent + tenant.maintenanceAmount + electricityBill;
+  
+        // Save the updated tenant
+        await tenant.save();
+      }
+  
+      res.json({ success: true, message: "Invoices calculated and updated!" });
+    } catch (error) {
+      res.status(500).json({ message: "Error calculating invoices", error });
+    }
+  });
+  
 module.exports = router;
