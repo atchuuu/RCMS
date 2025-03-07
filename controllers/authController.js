@@ -1,45 +1,69 @@
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const Tenant = require("../models/Tenant");
+const Admin = require("../models/Admin");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 
-exports.registerUser = async (req, res) => {
-    try {
-        const { name, email, mobile, password } = req.body;
-
-        const existingUser = await Tenant.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({ message: "User already exists" });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const user = new Tenant({ name, email, mobile, password: hashedPassword });
-        await user.save();
-
-        res.status(201).json({ message: "User registered successfully" });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+// 🛠 Generate JWT Token
+const generateToken = (user, role) => {
+  return jwt.sign(
+    { id: user._id, email: user.email, role },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
 };
 
-exports.loginUser = async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const user = await Tenant.findOne({ email });
+// ✅ Tenant Login (by email or mobile number)
+exports.tenantLogin = async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
 
-        if (!user) {
-            return res.status(400).json({ message: "User not found" });
-        }
+    // 🔍 Find tenant by email OR mobile number
+    const tenant = await Tenant.findOne({
+      $or: [{ email: identifier }, { mobileNumber: identifier }],
+    });
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({ message: "Invalid credentials" });
-        }
+    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
 
-        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    // 🔑 Compare password
+    const isMatch = await bcrypt.compare(password, tenant.password);
+    if (!isMatch) return res.status(400).json({ success: false, message: "Invalid credentials" });
 
-        res.json({ token, userId: user._id });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+    res.json({
+      success: true,
+      token: generateToken(tenant, "tenant"),
+      tenant: {
+        id: tenant._id,
+        name: tenant.tname,
+        email: tenant.email,
+        mobileNumber: tenant.mobileNumber,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ✅ Admin Login
+exports.adminLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const admin = await Admin.findOne({ email });
+    if (!admin) return res.status(404).json({ success: false, message: "Admin not found" });
+
+    const isMatch = await bcrypt.compare(password, admin.password);
+    if (!isMatch) return res.status(400).json({ success: false, message: "Invalid credentials" });
+
+    res.json({
+      success: true,
+      token: generateToken(admin, "admin"),
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };

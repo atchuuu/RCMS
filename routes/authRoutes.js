@@ -1,9 +1,12 @@
 const express = require("express");
-const { loginUser, registerUser } = require("../controllers/authController");
+const { tenantLogin, adminLogin } = require("../controllers/authController");
 
 const router = express.Router();
 
-router.post("/register", registerUser);
-router.post("/login", loginUser);
+// 🟢 Tenant Login (by email or mobile number)
+router.post("/tenant/login", tenantLogin);
+
+// 🔵 Admin Login
+router.post("/admin/login", adminLogin);
 
 module.exports = router;

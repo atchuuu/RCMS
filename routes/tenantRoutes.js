@@ -1,31 +1,28 @@
 const express = require("express");
 const {
+    tenantLogin, // ✅ Import tenantLogin
     addTenant,
     getAllTenants,
     updateTenant,
     deleteTenant,
     getTenantTransactions,
-    getTenantDashboard
+    getTenantDashboard,
+    getTenantProfile
 } = require("../controllers/tenantController");
+
+const { verifyToken } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// 🟢 **1. Add a new tenant**
+// ✅ Tenant Login Route
+router.post("/login", tenantLogin);
+
 router.post("/add", addTenant);
-
-// 🔵 **2. Get all tenants**
 router.get("/", getAllTenants);
-
-// 🟡 **3. Update tenant details**
 router.put("/update/:tid", updateTenant);
-
-// 🔴 **4. Delete a tenant**
 router.delete("/delete/:tid", deleteTenant);
-
-// 🟣 **5. Get past transactions of a tenant**
 router.get("/:tid/transactions", getTenantTransactions);
-
-// 🟠 **6. Get tenant dashboard**
 router.get("/dashboard", getTenantDashboard);
+router.get("/me", verifyToken, getTenantProfile);
 
 module.exports = router;
