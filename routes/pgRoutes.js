@@ -1,7 +1,23 @@
 const express = require("express");
-const { addPG, getAllPGs, getPGById, updatePG, deletePG } = require("../controllers/pgController");
-
 const router = express.Router();
+const upload = require("../middleware/upload");
+
+// ✅ Import all controller functions in one statement
+const { 
+    addPG, 
+    getAllPGs, 
+    getPGById, 
+    updatePG, 
+    deletePG, 
+    uploadPGImages, 
+    deletePGImage 
+} = require("../controllers/pgController");
+
+// Upload PG Images
+router.post("/upload/:pgId", upload.array("images", 5), uploadPGImages);
+
+// Delete PG Image
+router.delete("/delete/:pgId/:imageName", deletePGImage);
 
 // Route to add a new PG
 router.post("/add", addPG);

@@ -7,7 +7,8 @@ const pgSchema = new mongoose.Schema({
     address: { type: String, required: true },
     ownerName: { type: String, required: true },
     contact: { type: String, required: true },
-    vacantRooms: { type: Number, default: 0 } // Added vacant rooms field
+    vacantRooms: { type: Number, default: 0 },
+    images: [{ type: String }]  // Added vacant rooms field
 });
 
 module.exports = mongoose.model("PG", pgSchema);
