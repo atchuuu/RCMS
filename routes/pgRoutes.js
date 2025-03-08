@@ -13,7 +13,7 @@ const {
     deletePGImage 
 } = require("../controllers/pgController");
 
-// Upload PG Images
+// Route to upload PG images
 router.post("/upload/:pgId", upload.array("images", 5), uploadPGImages);
 
 // Delete PG Image
