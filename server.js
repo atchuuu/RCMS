@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const cors = require("cors");
 
+const multer = require("multer");
+
 const tenantRoutes = require("./routes/tenantRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
 const pgRoutes = require("./routes/pgRoutes");
@@ -14,7 +16,7 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
-
+app.use(express.urlencoded({ extended: true }));
 mongoose
   .connect(process.env.MONGO_URI, {
     useNewUrlParser: true,

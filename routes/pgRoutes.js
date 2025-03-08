@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const upload = require("../middleware/upload");
-
+const uploadExcel = require("../middleware/uploadExcel");
+const { uploadPGData } = require("../controllers/pgExcelController");
 // ✅ Import all controller functions in one statement
 const { 
     addPG, 
@@ -33,5 +34,7 @@ router.put("/update/:pgId", updatePG);
 
 // Route to delete a PG by pgId
 router.delete("/delete/:pgId", deletePG);
+
+router.post("/upload-excel", uploadExcel.single("file"), uploadPGData);
 
 module.exports = router;

@@ -1,36 +1,40 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcrypt"); // 🛠 Import bcrypt
+const bcrypt = require("bcrypt");
 
-const TenantSchema = new mongoose.Schema({
-  tid: { type: Number, unique: true, required: true },
-  tname: { type: String, required: true },
-  mobileNumber: { type: String, required: true, unique: true }, // 🆕 Prevent duplicate numbers
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  pgName: { type: String, required: true },
-  roomNo: { type: String, required: true },
-  rent: { type: Number, required: true },
-  documentsUploaded: { type: Boolean, default: false },
-  idCardUploaded: { type: Boolean, default: false },
-  securityAmount: { type: Number, required: true },
-  maintenanceAmount: { type: Number, required: true, default: 500 },
-  electricityPastMonth: { type: Number, default: 0 },
-  electricityPresentMonth: { type: Number, default: 0 },
-  dueElectricityBill: { type: Number, default: 0 },
-  totalAmountDue: { type: Number, default: 0 },
-  transactions: [
-    {
-      date: { type: Date, default: Date.now },
-      amount: { type: Number, required: true },
-      utrNumber: { type: String }, // 🆕 No `required: true`, so it can be empty for pending payments
-      status: { 
-        type: String, 
-        enum: ["Paid", "Pending", "Failed", "Cancelled"], // 🆕 Added more payment statuses
-        default: "Pending" 
+const TenantSchema = new mongoose.Schema(
+  {
+    tid: { type: Number, unique: true, default: Date.now }, // Auto-generate tenant ID
+    tname: { type: String }, // Will be updated later
+    mobileNumber: { type: String, required: true, unique: true }, // Required
+    email: { type: String, required: true, unique: true }, // Required
+    password: { type: String, required: true }, // Required
+    pgId: { type: String },
+     // Will be updated later
+    roomNo: { type: String }, // Will be updated later
+    rent: { type: Number }, // Will be updated later
+    documentsUploaded: { type: Boolean, default: false },
+    idCardUploaded: { type: Boolean, default: false },
+    securityAmount: { type: Number, default: 500 }, // Default value to prevent missing data
+    maintenanceAmount: { type: Number, default: 500 }, // Default value
+    electricityPastMonth: { type: Number, default: 0 },
+    electricityPresentMonth: { type: Number, default: 0 },
+    dueElectricityBill: { type: Number, default: 0 },
+    totalAmountDue: { type: Number, default: 0 },
+    transactions: [
+      {
+        date: { type: Date, default: Date.now },
+        amount: { type: Number },
+        utrNumber: { type: String },
+        status: {
+          type: String,
+          enum: ["Paid", "Pending", "Failed", "Cancelled"],
+          default: "Pending",
+        },
       },
-    }
-  ]
-}, { timestamps: true });
+    ],
+  },
+  { timestamps: true }
+);
 
 // 🔑 Hash password before saving
 TenantSchema.pre("save", async function (next) {

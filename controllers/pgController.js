@@ -118,6 +118,4 @@ const deletePGImage = async (req, res) => {
     }
 };
 
-
-
-module.exports = { addPG, getAllPGs, getPGById, updatePG, deletePG, uploadPGImages, deletePGImage};
+module.exports = { addPG, getAllPGs, getPGById, updatePG, deletePG, uploadPGImages, deletePGImage };
