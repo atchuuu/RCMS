@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 
 const addTenant = async (req, res) => {
     try {
-        let { tname, mobileNumber, email, password, pgName, roomNo, rent, securityAmount } = req.body;
+        let { tname, mobileNumber, email, password} = req.body;
 
         // 🛑 **Check if tenant already exists (by email or mobile)**
         const existingTenant = await Tenant.findOne({ $or: [{ email }, { mobileNumber }] });
@@ -24,20 +24,8 @@ const addTenant = async (req, res) => {
             tname,
             mobileNumber,
             email,
-            password,  // ✅ Password will be hashed automatically in Schema
-            pgName,
-            roomNo,
-            rent,
-            securityAmount,
-            transactions: [], // Start with empty transactions
-            documentsUploaded: false,
-            idCardUploaded: false,
-            maintenanceAmount: 500, // Default maintenance fee
-            electricityPastMonth: 0,
-            electricityPresentMonth: 0,
-            dueElectricityBill: 0,
-            totalAmountDue: 0,
-        });
+            password  // ✅ Password will be hashed automatically in Schema
+            });
 
         await newTenant.save();
 
