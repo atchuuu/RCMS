@@ -138,7 +138,33 @@ const tenantLogin = async (req, res) => {
         res.status(500).json({ message: "Server error", error });
     }
 };
-
+const uploadDocuments = async (req, res) => {
+    try {
+      const { tenantName, mobileNumber } = req.body;
+  
+      if (!tenantName || !mobileNumber) {
+        return res.status(400).json({ success: false, message: "Tenant details required" });
+      }
+  
+      // Update tenant record to mark documents as uploaded
+      const tenant = await Tenant.findOneAndUpdate(
+        { mobileNumber },
+        { idCardUploaded: true, documentsUploaded: true },
+        { new: true }
+      );
+  
+      if (!tenant) {
+        return res.status(404).json({ success: false, message: "Tenant not found" });
+      }
+  
+      res.status(200).json({ success: true, message: "Documents uploaded successfully" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: "Server error", error });
+    }
+  };
+  
+  module.exports = { uploadDocuments };
 
 module.exports = {
     tenantLogin, // ✅ Export tenantLogin
@@ -149,4 +175,5 @@ module.exports = {
     getTenantTransactions,
     getTenantDashboard,
     getTenantProfile,
+    uploadDocuments,
 };

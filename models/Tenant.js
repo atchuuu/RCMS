@@ -15,6 +15,7 @@ const TenantSchema = new mongoose.Schema(
     documentsUploaded: { type: Boolean, default: false },
     idCardUploaded: { type: Boolean, default: false },
     securityAmount: { type: Number, default: 500 }, // Default value to prevent missing data
+    isVerified: { type: Boolean, default: false },
     maintenanceAmount: { type: Number, default: 500 }, // Default value
     electricityPastMonth: { type: Number, default: 0 },
     electricityPresentMonth: { type: Number, default: 0 },

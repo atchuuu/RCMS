@@ -14,6 +14,9 @@ const { verifyToken } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+const uploadId = require("../middleware/uploadId");
+const { uploadDocuments } = require("../controllers/tenantController");
+
 // ✅ Tenant Login Route
 router.post("/login", tenantLogin);
 
@@ -24,5 +27,6 @@ router.delete("/delete/:tid", deleteTenant);
 router.get("/:tid/transactions", getTenantTransactions);
 router.get("/dashboard", getTenantDashboard);
 router.get("/me", verifyToken, getTenantProfile);
+router.post("/upload", uploadId.fields([{ name: "idCard" }, { name: "documents" }]), uploadDocuments);
 
 module.exports = router;
