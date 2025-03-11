@@ -10,6 +10,7 @@ const invoiceRoutes = require("./routes/invoiceRoutes");
 const pgRoutes = require("./routes/pgRoutes");
 const authRoutes = require("./routes/authRoutes"); // 🆕 Added authentication routes
 const adminRoutes = require("./routes/adminRoutes");
+const formRoutes = require("./routes/formRoutes");
 dotenv.config();
 
 const app = express();
@@ -30,7 +31,7 @@ app.use("/api/pg", pgRoutes);
 app.use("/api/auth", authRoutes); // ✅ Added auth routes
 app.use("/api/admin", adminRoutes);
 app.use("/api/tenant", tenantRoutes);
-
+app.use("/api/contact", formRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
