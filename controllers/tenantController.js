@@ -119,25 +119,56 @@ const getTenantProfile = async (req, res) => {
 };
 const tenantLogin = async (req, res) => {
     try {
-        const { email, password } = req.body;
-        const tenant = await Tenant.findOne({ email });
+        const { email, mobileNumber, password } = req.body;
 
-        if (!tenant) return res.status(404).json({ message: "Tenant not found" });
+        // 🛑 Validate input
+        if ((!email && !mobileNumber) || !password) {
+            return res.status(400).json({ message: "Email or Mobile and password are required" });
+        }
 
-        // 🔐 **Password Check (Compare with Hashed Password in Schema)**
+        console.log("🔍 Searching for:", email || mobileNumber); // Debugging
+
+        // 🔍 Find tenant by email OR mobile number
+        const tenant = await Tenant.findOne({
+            $or: [
+                { email: email || null },
+                { mobileNumber: mobileNumber ? mobileNumber.toString() : null }
+            ],
+        });
+
+        if (!tenant) {
+            console.log("❌ Tenant not found:", email || mobileNumber);
+            return res.status(404).json({ message: "Tenant not found" });
+        }
+
+        console.log("✅ Tenant found:", tenant.email, tenant.mobileNumber);
+
+        // 🔑 Compare password
         const isMatch = await bcrypt.compare(password, tenant.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+        if (!isMatch) {
+            console.log("❌ Invalid password for:", email || mobileNumber);
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
 
         // ✅ Generate JWT Token
         const token = jwt.sign({ id: tenant._id, role: "tenant" }, process.env.JWT_SECRET, {
-            expiresIn: "7d",  // 7 days expiry
+            expiresIn: "7d",
         });
 
-        res.json({ token, tenant: { id: tenant._id, email: tenant.email } });
+        res.json({
+            token,
+            tenant: {
+                id: tenant._id,
+                email: tenant.email,
+                mobileNumber: tenant.mobileNumber,
+            },
+        });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error });
+        console.error("❌ Server Error:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
     }
 };
+
 const uploadDocuments = async (req, res) => {
     try {
       const { tenantName, mobileNumber } = req.body;
@@ -164,8 +195,6 @@ const uploadDocuments = async (req, res) => {
     }
   };
   
-  module.exports = { uploadDocuments };
-
 module.exports = {
     tenantLogin, // ✅ Export tenantLogin
     addTenant,
