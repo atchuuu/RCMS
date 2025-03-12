@@ -1,5 +1,5 @@
 const express = require("express");
-const { adminLogin, getAdminProfile } = require("../controllers/adminController");
+const { adminLogin, getAdminProfile,verifyTenant } = require("../controllers/adminController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -10,4 +10,5 @@ router.post("/login", adminLogin);
 // 🔵 **Get Admin Profile (Protected)**
 router.get("/me", verifyToken, getAdminProfile);
 
+router.post("/verify/:tenantId", verifyToken, verifyTenant);
 module.exports = router;

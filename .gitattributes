@@ -1,2 +1,0 @@
-Win64OpenSSL-3_4_1.exe filter=lfs diff=lfs merge=lfs -text
-Win64OpenSSL_Light-3_4_1.exe filter=lfs diff=lfs merge=lfs -text

@@ -6,36 +6,38 @@ const jwt = require("jsonwebtoken");
 
 const addTenant = async (req, res) => {
     try {
-        let { tname, mobileNumber, email, password} = req.body;
+        let { tname, mobileNumber, email, password } = req.body;
 
-        // 🛑 **Check if tenant already exists (by email or mobile)**
+        if (!mobileNumber) {
+            return res.status(400).json({ message: "Mobile number is required!" });
+        }
+
         const existingTenant = await Tenant.findOne({ $or: [{ email }, { mobileNumber }] });
         if (existingTenant) {
             return res.status(400).json({ message: "Tenant already exists with this email or mobile number" });
         }
 
-        // 🔢 **Generate a unique `tid` (Auto-increment logic)**
         const lastTenant = await Tenant.findOne().sort({ tid: -1 });
-        const tid = lastTenant ? lastTenant.tid + 1 : 1; // ✅ Auto-increment
+        const tid = lastTenant ? lastTenant.tid + 1 : 1;
 
-        // 🏠 **Create a new tenant entry**
         const newTenant = new Tenant({
-            tid,  // ✅ Adding auto-generated `tid`
+            tid,
             tname,
             mobileNumber,
             email,
-            password  // ✅ Password will be hashed automatically in Schema
-            });
+            password
+        });
 
         await newTenant.save();
-
         res.status(201).json({ message: "Tenant registered successfully!", tenant: newTenant });
 
     } catch (error) {
-        console.error("❌ Error registering tenant:", error);
+        console.error("Error registering tenant:", error);
         res.status(500).json({ message: "Server error", error });
     }
 };
+
+
 // 🔵 **2. Get all tenants**
 const getAllTenants = async (req, res) => {
     try {
@@ -109,94 +111,119 @@ const getTenantDashboard = async (req, res) => {
 };
 const getTenantProfile = async (req, res) => {
     try {
-        const tenant = await Tenant.findById(req.user.id).select("-password"); // Exclude password
-        if (!tenant) return res.status(404).json({ message: "Tenant not found" });
-
+        const tenant = await Tenant.findOne({ _id: req.user.id }); // Assuming ID is stored in JWT
+        if (!tenant) {
+            return res.status(404).json({ message: 'Tenant not found' });
+        }
         res.json(tenant);
     } catch (error) {
-        res.status(500).json({ message: "Server error", error });
+        console.error(error);
+        res.status(500).json({ message: 'Server Error' });
     }
 };
+
+
 const tenantLogin = async (req, res) => {
     try {
         const { email, mobileNumber, password } = req.body;
 
-        // 🛑 Validate input
-        if ((!email && !mobileNumber) || !password) {
-            return res.status(400).json({ message: "Email or Mobile and password are required" });
+        // 🛑 **Check if email or mobile number is provided**
+        if (!email && !mobileNumber) {
+            return res.status(400).json({ message: "Email or mobile number is required" });
         }
 
-        console.log("🔍 Searching for:", email || mobileNumber); // Debugging
-
-        // 🔍 Find tenant by email OR mobile number
+        // 🔎 **Find tenant by email OR mobile number**
         const tenant = await Tenant.findOne({
-            $or: [
-                { email: email || null },
-                { mobileNumber: mobileNumber ? mobileNumber.toString() : null }
-            ],
+            $or: [{ email }, { mobileNumber }]
         });
 
         if (!tenant) {
-            console.log("❌ Tenant not found:", email || mobileNumber);
-            return res.status(404).json({ message: "Tenant not found" });
+            return res.status(401).json({ message: "Invalid credentials" });
         }
 
-        console.log("✅ Tenant found:", tenant.email, tenant.mobileNumber);
-
-        // 🔑 Compare password
+        // 🔑 **Verify password**
         const isMatch = await bcrypt.compare(password, tenant.password);
         if (!isMatch) {
-            console.log("❌ Invalid password for:", email || mobileNumber);
-            return res.status(400).json({ message: "Invalid credentials" });
+            return res.status(401).json({ message: "Invalid credentials" });
         }
 
-        // ✅ Generate JWT Token
-        const token = jwt.sign({ id: tenant._id, role: "tenant" }, process.env.JWT_SECRET, {
-            expiresIn: "7d",
-        });
+        // 🛠️ **Generate JWT token**
+        const token = jwt.sign(
+            { tenantId: tenant._id, email: tenant.email },
+            process.env.JWT_SECRET, // Ensure you have a valid secret key
+            { expiresIn: "7d" }
+        );
 
-        res.json({
+        res.status(200).json({
+            message: "Login successful",
             token,
             tenant: {
-                id: tenant._id,
+                tid: tenant.tid,
+                tname: tenant.tname,
                 email: tenant.email,
                 mobileNumber: tenant.mobileNumber,
-            },
+                pgName: tenant.pgName,
+                roomNo: tenant.roomNo,
+                documentsUploaded: tenant.documentsUploaded,
+                idCardUploaded: tenant.idCardUploaded,
+            }
         });
+
     } catch (error) {
-        console.error("❌ Server Error:", error);
-        res.status(500).json({ message: "Server error", error: error.message });
+        console.error("❌ Login error:", error);
+        res.status(500).json({ message: "Server error", error });
     }
 };
 
+
 const uploadDocuments = async (req, res) => {
     try {
-      const { tenantName, mobileNumber } = req.body;
+      const { mobileNumber, pgName, roomNo } = req.body;
   
-      if (!tenantName || !mobileNumber) {
-        return res.status(400).json({ success: false, message: "Tenant details required" });
+      if (!mobileNumber || !pgName || !roomNo) {
+        return res.status(400).json({ success: false, message: "PG Name, Room No, and Mobile Number are required." });
       }
   
-      // Update tenant record to mark documents as uploaded
-      const tenant = await Tenant.findOneAndUpdate(
-        { mobileNumber },
-        { idCardUploaded: true, documentsUploaded: true },
-        { new: true }
-      );
+      // Check if files are uploaded
+      if (!req.files || (!req.files["idCard"] && !req.files["aadharCard"])) {
+        return res.status(400).json({ success: false, message: "Both Aadhar and ID Card must be uploaded." });
+      }
+  
+      // Find the tenant by mobile number
+      const tenant = await Tenant.findOne({ mobileNumber });
   
       if (!tenant) {
         return res.status(404).json({ success: false, message: "Tenant not found" });
       }
   
-      res.status(200).json({ success: true, message: "Documents uploaded successfully" });
+      // Update document paths
+      const updateData = {
+        documentsUploaded: req.files["aadharCard"] ? true : tenant.documentsUploaded,
+        idCardUploaded: req.files["idCard"] ? true : tenant.idCardUploaded,
+        aadharCardPath: req.files["aadharCard"] ? req.files["aadharCard"][0].path : tenant.aadharCardPath,
+        idCardPath: req.files["idCard"] ? req.files["idCard"][0].path : tenant.idCardPath,
+        pgName,
+        roomNo
+      };
+  
+      // Update the tenant in the database
+      const updatedTenant = await Tenant.findOneAndUpdate(
+        { mobileNumber },
+        { $set: updateData },
+        { new: true }
+      );
+  
+      res.status(200).json({ success: true, message: "Documents uploaded successfully!", updatedTenant });
     } catch (error) {
       console.error(error);
       res.status(500).json({ success: false, message: "Server error", error });
     }
   };
-  
+
+
+
 module.exports = {
-    tenantLogin, // ✅ Export tenantLogin
+    tenantLogin,
     addTenant,
     getAllTenants,
     updateTenant,

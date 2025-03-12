@@ -36,8 +36,27 @@ const getAdminProfile = async (req, res) => {
         res.status(500).json({ message: "Server error", error });
     }
 };
-
+const verifyTenant = async (req, res) => {
+    try {
+      const { tenantId } = req.params;
+  
+      const tenant = await Tenant.findById(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ success: false, message: "Tenant not found" });
+      }
+  
+      tenant.isVerified = true;
+      await tenant.save();
+  
+      res.json({ success: true, message: "Tenant verified successfully" });
+    } catch (error) {
+      console.error("Error verifying tenant:", error);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  };
+  
 module.exports = {
     adminLogin,
     getAdminProfile,
+    verifyTenant,
 };

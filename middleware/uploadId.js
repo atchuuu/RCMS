@@ -2,52 +2,35 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs-extra");
 
-// Define storage for ID Cards and Documents
+// Define storage
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     try {
-      const idCardPath = path.join(__dirname, "../uploads/tenantDocuments/idCard/");
-      const documentPath = path.join(__dirname, "../uploads/tenantDocuments/documents/");
-
-      // Create directories if they don’t exist
-      await fs.ensureDir(idCardPath);
-      await fs.ensureDir(documentPath);
-
-      // Store based on file fieldname
-      if (file.fieldname === "idCard") {
-        cb(null, idCardPath);
-      } else if (file.fieldname === "documents") {
-        cb(null, documentPath);
-      } else {
-        cb(new Error("Invalid file type"));
-      }
+      const uploadPath = path.join(__dirname, `../uploads/tenantDocuments/${file.fieldname}/`);
+      await fs.ensureDir(uploadPath);
+      cb(null, uploadPath);
     } catch (err) {
       cb(err);
     }
   },
   filename: (req, file, cb) => {
-    const { tenantName, mobileNumber } = req.body; // Tenant details from request
-    if (!tenantName || !mobileNumber) {
-      return cb(new Error("Missing tenant details"));
+    const { mobileNumber } = req.body;
+    if (!mobileNumber) {
+      return cb(new Error("Missing tenant mobile number"));
     }
-
     const fileExt = path.extname(file.originalname);
-    const fileName = `${tenantName}_${mobileNumber}${fileExt}`;
+    const fileName = `${mobileNumber}${fileExt}`;
     cb(null, fileName);
   },
 });
 
-// Multer file filter (optional)
+// File filter
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Invalid file type. Only JPEG, PNG, and PDF are allowed."));
-  }
+  allowedTypes.includes(file.mimetype) ? cb(null, true) : cb(new Error("Invalid file type."));
 };
 
-// Multer upload instance
-const upload = multer({ storage, fileFilter });
+// Upload instance
+const uploadId = multer({ storage, fileFilter });
 
-module.exports = upload;
+module.exports = uploadId;
