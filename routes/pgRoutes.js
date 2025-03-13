@@ -27,7 +27,8 @@ router.post("/add", addPG);
 router.get("/all", getAllPGs);
 
 // Route to get a PG by pgId
-router.get("/:pgId", getPGById);
+router.get("/pgid/:pgId", getPGById); // ✅ Change route to avoid conflict with MongoDB ID
+
 
 // Route to update a PG by pgId
 router.put("/update/:pgId", updatePG);

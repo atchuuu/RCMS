@@ -34,9 +34,13 @@ const getAllPGs = async (req, res) => {
 const getPGById = async (req, res) => {
     try {
         const { pgId } = req.params;
-        const pg = await PG.findOne({ pgId });
+        console.log("Fetching PG details for pgId:", pgId); // Debugging
 
-        if (!pg) return res.status(404).json({ message: "PG not found" });
+        const pg = await PG.findOne({ pgId: pgId }); // ✅ Ensure we fetch by `pgId`
+
+        if (!pg) {
+            return res.status(404).json({ message: "PG not found" });
+        }
 
         res.status(200).json(pg);
     } catch (error) {
