@@ -34,7 +34,7 @@ const getAllPGs = async (req, res) => {
 const getPGById = async (req, res) => {
     try {
         const { pgId } = req.params;
-        console.log("Fetching PG details for pgId:", pgId); // Debugging
+        
 
         const pg = await PG.findOne({ pgId: pgId }); // ✅ Ensure we fetch by `pgId`
 
