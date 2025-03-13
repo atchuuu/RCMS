@@ -30,13 +30,11 @@ const getAllPGs = async (req, res) => {
     }
 };
 
-// Get PG by pgId
+
 const getPGById = async (req, res) => {
     try {
         const { pgId } = req.params;
-        
-
-        const pg = await PG.findOne({ pgId: pgId }); // ✅ Ensure we fetch by `pgId`
+        const pg = await PG.findOne({ pgId });
 
         if (!pg) {
             return res.status(404).json({ message: "PG not found" });
@@ -47,6 +45,9 @@ const getPGById = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+module.exports = { getPGById };
+
 
 // Update PG details by pgId
 const updatePG = async (req, res) => {
@@ -75,21 +76,20 @@ const deletePG = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+
 const uploadPGImages = async (req, res) => {
     try {
         const pgId = req.params.pgId;
-        
+
         // Find the PG by pgId
         const pg = await PG.findOne({ pgId });
-
         if (!pg) return res.status(404).json({ message: "PG not found" });
 
-        // Map through the uploaded files and store the paths
-        const imagePaths = req.files.map(file => `/uploads/pg-images/${file.filename}`);
-        
+        const imagePaths = req.files.map(file => `/uploads/pg-images/${pgId}/${file.filename}`);
+
         // Add new image paths to the PG document
         pg.images.push(...imagePaths);
-
         await pg.save();
 
         res.status(200).json({ message: "Images uploaded successfully", images: pg.images });
@@ -98,6 +98,7 @@ const uploadPGImages = async (req, res) => {
         res.status(500).json({ message: "Server error", error });
     }
 };
+
 const deletePGImage = async (req, res) => {
     try {
         const { pgId, imageName } = req.params;
@@ -122,4 +123,32 @@ const deletePGImage = async (req, res) => {
     }
 };
 
-module.exports = { addPG, getAllPGs, getPGById, updatePG, deletePG, uploadPGImages, deletePGImage };
+const deleteAllImages = async (req, res) => {
+    try {
+        const { pgId } = req.params;
+        
+        // Find the PG by pgId
+        const pg = await PG.findOne({ pgId });
+        if (!pg) return res.status(404).json({ message: "PG not found" });
+
+        // Construct the directory path
+        const pgDirectory = path.join(__dirname, "..", "uploads", "pg-images", pgId);
+
+        // Check if directory exists
+        if (fs.existsSync(pgDirectory)) {
+            fs.rmSync(pgDirectory, { recursive: true, force: true }); // Delete directory and contents
+        }
+
+        // Remove image references from the database
+        pg.images = [];
+        await pg.save();
+
+        res.status(200).json({ message: `All images for PG ${pgId} deleted successfully.` });
+    } catch (error) {
+        console.error("❌ Error deleting PG images:", error);
+        res.status(500).json({ message: "Server error", error });
+    }
+};
+
+
+module.exports = { addPG, getAllPGs, getPGById, updatePG, deletePG, uploadPGImages, deletePGImage,deleteAllImages };

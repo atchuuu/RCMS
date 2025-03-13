@@ -11,14 +11,16 @@ const {
     updatePG, 
     deletePG, 
     uploadPGImages, 
-    deletePGImage 
+    deletePGImage,
+    deleteAllImages, 
 } = require("../controllers/pgController");
 
 // Route to upload PG images
 router.post("/upload/:pgId", upload.array("images", 5), uploadPGImages);
 
 // Delete PG Image
-router.delete("/delete/:pgId/:imageName", deletePGImage);
+router.delete("/delete-images/:pgId/:imageName", deletePGImage);
+router.delete("/delete-images/:pgId", deleteAllImages);
 
 // Route to add a new PG
 router.post("/add", addPG);

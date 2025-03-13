@@ -2,7 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const cors = require("cors");
-
+const path=require("path")
 const multer = require("multer");
 
 const tenantRoutes = require("./routes/tenantRoutes");
@@ -35,6 +35,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/tenant", tenantRoutes);
 app.use("/api/contact", formRoutes);
 app.use("/api/enquiry", enquiryRoutes);
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

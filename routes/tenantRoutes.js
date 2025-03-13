@@ -8,6 +8,7 @@ const {
     getTenantTransactions,
     getTenantDashboard,
     getTenantProfile,
+    addTransaction,
 } = require("../controllers/tenantController");
 
 const { verifyToken } = require("../middleware/authMiddleware");
@@ -27,6 +28,7 @@ router.delete("/delete/:tid", deleteTenant);
 router.get("/:tid/transactions", getTenantTransactions);
 router.get("/dashboard", getTenantDashboard);
 router.get("/me", verifyToken, getTenantProfile);
+router.put("/:tid/transactions", addTransaction);
 router.post(
     "/upload",
     verifyToken, // ✅ Require authentication

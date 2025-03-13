@@ -76,18 +76,23 @@ const deleteTenant = async (req, res) => {
 const getTenantTransactions = async (req, res) => {
     try {
         const { tid } = req.params;
-        const tenant = await Tenant.findOne({ tid });
+
+        // Fetch only the transactions array from the tenant document
+        const tenant = await Tenant.findOne({ tid }, { transactions: 1, _id: 0 });
 
         if (!tenant) {
             return res.status(404).json({ message: "Tenant not found" });
         }
 
-        res.status(200).json({ transactions: tenant.transactions });
+        // Sort transactions in descending order (latest first)
+        const sortedTransactions = tenant.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        res.status(200).json({ transactions: sortedTransactions });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error("Error fetching transactions:", error);
+        res.status(500).json({ message: "Internal Server Error", error: error.message });
     }
 };
-
 // 🟠 **6. Get tenant dashboard**
 const getTenantDashboard = async (req, res) => {
     try {
@@ -220,6 +225,33 @@ const uploadDocuments = async (req, res) => {
     }
   };
 
+  const addTransaction = async (req, res) => {
+    try {
+        const { tid } = req.params;
+        const { amount, utrNumber } = req.body;
+
+        if (!amount || !utrNumber) {
+            return res.status(400).json({ message: "Amount and UTR number are required." });
+        }
+
+        const tenant = await Tenant.findOne({ tid });
+
+        if (!tenant) {
+            return res.status(404).json({ message: "Tenant not found" });
+        }
+
+        // Add transaction to the array
+        tenant.transactions.push({ amount, utrNumber, date: new Date() });
+
+        // Save updated tenant
+        await tenant.save();
+
+        res.status(200).json({ message: "Transaction added successfully.", transactions: tenant.transactions });
+    } catch (error) {
+        console.error("Error adding transaction:", error);
+        res.status(500).json({ message: "Internal Server Error", error: error.message });
+    }
+};
 
 
 module.exports = {
@@ -232,4 +264,5 @@ module.exports = {
     getTenantDashboard,
     getTenantProfile,
     uploadDocuments,
+    addTransaction,
 };

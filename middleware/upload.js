@@ -2,19 +2,23 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-// Create the uploads/pg-images directory if it doesn't exist
 const uploadDirectory = "uploads/pg-images";
-if (!fs.existsSync(uploadDirectory)) {
-    fs.mkdirSync(uploadDirectory, { recursive: true });
-}
 
 // Set Storage Engine for Multer
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, uploadDirectory); // Store images in the "uploads/pg-images/" folder
+        const pgId = req.params.pgId;
+        const pgDirectory = path.join(__dirname, "..", "uploads", "pg-images", pgId);
+        
+        // Ensure PG directory exists
+        if (!fs.existsSync(pgDirectory)) {
+            fs.mkdirSync(pgDirectory, { recursive: true });
+        }
+
+        cb(null, pgDirectory);
     },
     filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname)); // Use a unique filename based on timestamp
+        cb(null, Date.now() + path.extname(file.originalname)); // Save with timestamp
     }
 });
 
