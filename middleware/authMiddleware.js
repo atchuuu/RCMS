@@ -15,7 +15,12 @@ const verifyToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(bearerToken, process.env.JWT_SECRET);
-    const tenant = await Tenant.findById(decoded.tenantId);
+    console.log("Decoded JWT:", decoded);
+
+    // Query by tid (expects a Number)
+    const tenant = await Tenant.findOne({ tid: decoded.tenantId });
+    console.log("Tenant found:", tenant);
+
     if (!tenant) {
       return res.status(404).json({ message: "Tenant not found." });
     }

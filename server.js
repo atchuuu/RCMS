@@ -12,6 +12,7 @@ const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const formRoutes = require("./routes/formRoutes");
 const enquiryRoutes = require("./routes/enquiryRoutes");
+const maintenanceRoutes = require("./routes/maintenanceRoutes"); // Import routes
 
 dotenv.config();
 
@@ -30,6 +31,7 @@ mongoose
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
 // Routes
+
 app.use("/api/tenant", tenantRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/pg", pgRoutes);
@@ -37,6 +39,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/contact", formRoutes);
 app.use("/api/enquiry", enquiryRoutes);
+app.use("/api/maintenance", maintenanceRoutes);
 
 // Catch-all for 404s (for debugging)
 app.use((req, res) => {

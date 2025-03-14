@@ -140,60 +140,57 @@ const getTenantProfile = async (req, res) => {
     }
   };
 
- 
   const tenantLogin = async (req, res) => {
-      try {
-          const { email, mobileNumber, password } = req.body;
+    try {
+      const { email, mobileNumber, password } = req.body;
   
-          // Ensure at least one credential (email or mobile) is provided
-          if (!email && !mobileNumber) {
-              return res.status(400).json({ message: "Email or mobile number is required" });
-          }
-  
-          // Find tenant by email OR mobile number
-          const tenant = await Tenant.findOne({
-              $or: [{ email }, { mobileNumber }],
-          });
-  
-          if (!tenant) {
-              console.log("❌ No tenant found for email:", email, "or mobile:", mobileNumber);
-              return res.status(401).json({ message: "Invalid credentials" });
-          }
-  
-          // Verify password
-          const isMatch = await bcrypt.compare(password, tenant.password);
-          if (!isMatch) {
-              console.log("❌ Password mismatch for tenant:", tenant._id);
-              return res.status(401).json({ message: "Invalid credentials" });
-          }
-  
-          // Generate JWT token
-          const token = jwt.sign(
-              { tenantId: tenant._id, email: tenant.email },
-              process.env.JWT_SECRET,
-              { expiresIn: "7d" } // 7 days expiration
-          );
-  
-          res.status(200).json({
-              message: "✅ Login successful",
-              token,
-              tenant: {
-                  tid: tenant.tid,
-                  tname: tenant.tname,
-                  email: tenant.email,
-                  mobileNumber: tenant.mobileNumber,
-                  pgName: tenant.pgName,
-                  roomNo: tenant.roomNo,
-                  documentsUploaded: tenant.documentsUploaded,
-                  idCardUploaded: tenant.idCardUploaded,
-              },
-          });
-      } catch (error) {
-          console.error("❌ Login error:", error);
-          res.status(500).json({ message: "Server error", error });
+      if (!email && !mobileNumber) {
+        return res.status(400).json({ message: "Email or mobile number is required" });
       }
+  
+      const tenant = await Tenant.findOne({
+        $or: [{ email }, { mobileNumber }],
+      });
+  
+      if (!tenant) {
+        console.log("❌ No tenant found for email:", email, "or mobile:", mobileNumber);
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+  
+      const isMatch = await bcrypt.compare(password, tenant.password);
+      if (!isMatch) {
+        console.log("❌ Password mismatch for tenant:", tenant._id);
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+  
+      const token = jwt.sign(
+        { tenantId: tenant.tid, email: tenant.email },
+        process.env.JWT_SECRET,
+        { expiresIn: "7d" }
+      );
+  
+      res.status(200).json({
+        message: "✅ Login successful",
+        token,
+        tenant: {
+          tid: tenant.tid,
+          tname: tenant.tname,
+          email: tenant.email,
+          mobileNumber: tenant.mobileNumber,
+          pgName: tenant.pgName,
+          roomNo: tenant.roomNo,
+          documentsUploaded: tenant.documentsUploaded,
+          idCardUploaded: tenant.idCardUploaded,
+          isVerified: tenant.isVerified, // Add this
+        },
+      });
+    } catch (error) {
+      console.error("❌ Login error:", error);
+      res.status(500).json({ message: "Server error", error });
+    }
   };
   
+
 
 const uploadDocuments = async (req, res) => {
     try {
