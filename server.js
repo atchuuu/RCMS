@@ -4,7 +4,8 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const path=require("path")
 const multer = require("multer");
-
+const fs = require("fs");
+const https = require("https");
 const tenantRoutes = require("./routes/tenantRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
 const pgRoutes = require("./routes/pgRoutes");
@@ -16,6 +17,15 @@ const enquiryRoutes = require("./routes/enquiryRoutes");
 dotenv.config();
 
 const app = express();
+
+
+
+
+// Load SSL certificates
+const options = {
+    key: fs.readFileSync("server.key"),
+    cert: fs.readFileSync("server.cert"),
+};
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -37,5 +47,7 @@ app.use("/api/contact", formRoutes);
 app.use("/api/enquiry", enquiryRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
+https.createServer(options, app).listen(process.env.PORT || 5000, () => {
+  console.log("Secure server running on https://localhost:5000");
+});
