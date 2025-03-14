@@ -9,6 +9,7 @@ const {
     getTenantDashboard,
     getTenantProfile,
     addTransaction,
+    deleteDocumentsByPgName,
 } = require("../controllers/tenantController");
 
 const { verifyToken } = require("../middleware/authMiddleware");
@@ -31,11 +32,21 @@ router.get("/me", verifyToken, getTenantProfile);
 router.put("/:tid/transactions", addTransaction);
 router.post(
     "/upload",
-    verifyToken, // ✅ Require authentication
-    uploadId.fields([{ name: "aadharCard" }, { name: "idCard" }]),
+    verifyToken,
+    (req, res, next) => {
+      console.log("Received request body:", req.body);
+      console.log("Decoded user:", req.user);
+      
+      uploadId.fields([{ name: "aadharCard" }, { name: "idCard" }])(req, res, (err) => {
+        if (err) {
+          return res.status(400).json({ success: false, message: err.message });
+        }
+        next();
+      });
+    },
     uploadDocuments
-);
-
-
+  );
+  
+  router.post("/delete-documents", verifyToken, deleteDocumentsByPgName); // New route
 
 module.exports = router;

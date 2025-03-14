@@ -2,11 +2,11 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs-extra");
 
-// Define storage
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     try {
-      const uploadPath = path.join(__dirname, `../uploads/tenantDocuments/${file.fieldname}/`);
+      const folder = file.fieldname === "aadharCard" ? "aadhar card" : "idcard";
+      const uploadPath = path.join(__dirname, `../documents/${folder}/temp`); // Temporary folder
       await fs.ensureDir(uploadPath);
       cb(null, uploadPath);
     } catch (err) {
@@ -14,23 +14,19 @@ const storage = multer.diskStorage({
     }
   },
   filename: (req, file, cb) => {
-    const { mobileNumber } = req.body;
-    if (!mobileNumber) {
-      return cb(new Error("Missing tenant mobile number"));
-    }
     const fileExt = path.extname(file.originalname);
-    const fileName = `${mobileNumber}${fileExt}`;
+    const fileName = `${Date.now()}${fileExt}`; // Temporary filename
     cb(null, fileName);
   },
 });
 
-// File filter
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
-  allowedTypes.includes(file.mimetype) ? cb(null, true) : cb(new Error("Invalid file type."));
+  allowedTypes.includes(file.mimetype)
+    ? cb(null, true)
+    : cb(new Error("Invalid file type. Only JPEG, PNG, and PDF are allowed."));
 };
 
-// Upload instance
 const uploadId = multer({ storage, fileFilter });
 
 module.exports = uploadId;

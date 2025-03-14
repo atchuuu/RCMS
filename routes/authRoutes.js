@@ -1,6 +1,6 @@
 const express = require("express");
-const { tenantLogin, adminLogin } = require("../controllers/authController");
-
+const {  adminLogin } = require("../controllers/authController");
+const { tenantLogin } = require("../controllers/tenantController");
 const router = express.Router();
 
 // 🟢 Tenant Login (by email or mobile number)
