@@ -7,8 +7,8 @@ const invoiceSchema = new mongoose.Schema({
     tenantName: {type:String,required: true},
     amountDue: { type: Number, required: true },
     dueDate: { type: Date, required: true },
-    upiId: { type: String, required: true },
-    qrCodeImage: { type: String, required: true, default: "/assets/upi_qr.png" }, // Ensure it has a default path
+    upiId: { type: String, },
+    qrCodeImage: { type: String, required: true, default: "/.assets/upi_qr.png" }, // Ensure it has a default path
     status: { type: String, default: "Pending" },
     utrNumber: { type: String, default: null },
     paymentScreenshot: { type: String, default: null }

@@ -19,7 +19,12 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(cors({ origin: "*" }));
+
+app.use(cors({
+  origin: "https://localhost:3000", // Adjust if your frontend port differs
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
