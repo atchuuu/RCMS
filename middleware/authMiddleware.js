@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const Tenant = require("../models/Tenant");
+const Admin = require("../models/Admin");
 
 const verifyToken = async (req, res, next) => {
   const token = req.header("Authorization");
@@ -17,15 +18,45 @@ const verifyToken = async (req, res, next) => {
     const decoded = jwt.verify(bearerToken, process.env.JWT_SECRET);
     console.log("Decoded JWT:", decoded);
 
-    // Query by tid (expects a Number)
-    const tenant = await Tenant.findOne({ tid: decoded.tenantId });
-    console.log("Tenant found:", tenant);
+    // Check the role in the token payload
+    if (decoded.role === "admin") {
+      // For admin tokens, query the Admin model
+      const admin = await Admin.findById(decoded.id).select("-password");
+      console.log("Admin found:", admin);
 
-    if (!tenant) {
-      return res.status(404).json({ message: "Tenant not found." });
+      if (!admin) {
+        return res.status(404).json({ message: "Admin not found." });
+      }
+
+      // Convert Mongoose document to plain object and ensure id and _id fields
+      const adminData = admin.toObject();
+      req.user = {
+        ...adminData,
+        id: adminData._id.toString(),
+        _id: adminData._id.toString(),
+        role: "admin",
+      };
+      console.log("req.user set to:", req.user); // Debug log
+    } else {
+      // For tenant tokens, query the Tenant model
+      const tenant = await Tenant.findOne({ tid: decoded.tenantId });
+      console.log("Tenant found:", tenant);
+
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found." });
+      }
+
+      // Convert Mongoose document to plain object and ensure id and _id fields
+      const tenantData = tenant.toObject();
+      req.user = {
+        ...tenantData,
+        id: tenantData._id.toString(),
+        _id: tenantData._id.toString(),
+        role: decoded.role || "tenant",
+      };
+      console.log("req.user set to:", req.user); // Debug log
     }
 
-    req.user = tenant;
     next();
   } catch (error) {
     console.error("Token verification error:", error);

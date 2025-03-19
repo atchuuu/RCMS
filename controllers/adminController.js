@@ -28,14 +28,30 @@ const adminLogin = async (req, res) => {
 // ✅ **Get Admin Profile**
 const getAdminProfile = async (req, res) => {
     try {
-        const admin = await Admin.findById(req.user.id).select("-password");
-        if (!admin) return res.status(404).json({ message: "Admin not found" });
-
-        res.json(admin);
+      // Check if req.user and req.user.id (or req.user._id) are defined
+      if (!req.user || (!req.user.id && !req.user._id)) {
+        console.log("No user ID found in token");
+        return res.status(401).json({ message: "Unauthorized: Invalid or missing user ID in token" });
+      }
+  
+      // Use req.user.id if available, otherwise fall back to req.user._id
+      const userId = req.user.id || req.user._id;
+      console.log("Decoded Token User ID:", userId); // Debugging line
+  
+      // Fetch the admin by ID, excluding the password
+      const admin = await Admin.findById(userId).select("-password");
+      if (!admin) {
+        console.log("Admin not found for ID:", userId);
+        return res.status(404).json({ message: "Admin not found" });
+      }
+  
+      console.log("Admin found:", admin); // Debugging line
+      res.status(200).json(admin);
     } catch (error) {
-        res.status(500).json({ message: "Server error", error });
+      console.error("Error fetching admin profile:", error.message); // Log the error message
+      res.status(500).json({ message: "Server error while fetching admin profile", error: error.message });
     }
-};
+  };
 const verifyTenant = async (req, res) => {
     try {
       const { tenantId } = req.params;
