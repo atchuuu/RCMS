@@ -12,7 +12,8 @@ const {
     deletePG, 
     uploadPGImages, 
     deletePGImage,
-    deleteAllImages, 
+    deleteAllImages,
+    getLastPg,
 } = require("../controllers/pgController");
 
 // Route to upload PG images
@@ -39,5 +40,5 @@ router.put("/update/:pgId", updatePG);
 router.delete("/delete/:pgId", deletePG);
 
 router.post("/upload-excel", uploadExcel.single("file"), uploadPGData);
-
+router.get("/last", getLastPg);
 module.exports = router;

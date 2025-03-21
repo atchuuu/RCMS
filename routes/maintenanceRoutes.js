@@ -15,4 +15,7 @@ router.put("/update-status/:requestId", verifyToken, maintenanceController.updat
 // Update Feedback (Tenant Only)
 router.put("/feedback/:id", verifyToken, maintenanceController.updateFeedback);
 
+// Get Maintenance Requests by pgId (Admin Only)
+router.get("/pg/:pgId", verifyToken, maintenanceController.getRequestsByPgId);
+
 module.exports = router;

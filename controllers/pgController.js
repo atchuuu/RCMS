@@ -46,22 +46,31 @@ const getPGById = async (req, res) => {
     }
 };
 
-module.exports = { getPGById };
-
 
 // Update PG details by pgId
 const updatePG = async (req, res) => {
     try {
-        const { pgId } = req.params;
-        const updatedPG = await PG.findOneAndUpdate({ pgId }, req.body, { new: true });
-
-        if (!updatedPG) return res.status(404).json({ message: "PG not found" });
-
-        res.status(200).json({ message: "PG updated successfully", pg: updatedPG });
+      const { pgId } = req.params;
+      const updates = req.body;
+  
+      delete updates.pgId; // Prevent updating pgId
+  
+      const pg = await PG.findOneAndUpdate(
+        { pgId },
+        { $set: updates },
+        { new: true, runValidators: true }
+      );
+  
+      if (!pg) {
+        return res.status(404).json({ message: "PG not found" });
+      }
+  
+      res.status(200).json(pg);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+      console.error("❌ Error updating PG:", error);
+      res.status(500).json({ message: "Server error", error });
     }
-};
+  };
 
 // Delete a PG by pgId
 const deletePG = async (req, res) => {
@@ -101,28 +110,40 @@ const uploadPGImages = async (req, res) => {
 
 const deletePGImage = async (req, res) => {
     try {
-        const { pgId, imageName } = req.params;
-        
-        // Find the PG by pgId
-        const pg = await PG.findOne({ pgId });
-
-        if (!pg) return res.status(404).json({ message: "PG not found" });
-
-        // Construct the full image path and remove it from the images array
-        const imagePath = `/uploads/pg-images/${imageName}`;
-        pg.images = pg.images.filter(img => img !== imagePath);
-
-        // Delete the image file from local storage
-        fs.unlinkSync(path.join(__dirname, "..", imagePath));
-
-        await pg.save();
-        res.status(200).json({ message: "Image deleted successfully", images: pg.images });
+      const { pgId, imageName } = req.params;
+  
+      // Find the PG by pgId
+      const pg = await PG.findOne({ pgId });
+      if (!pg) return res.status(404).json({ message: "PG not found" });
+  
+      // Construct the full image path with pgId
+      const imagePath = `/uploads/pg-images/${pgId}/${imageName}`;
+      console.log("Attempting to delete image at path:", imagePath); // Debug log
+  
+      // Check if the image exists in the images array
+      if (!pg.images.includes(imagePath)) {
+        return res.status(404).json({ message: "Image not found in PG record" });
+      }
+  
+      // Remove the image from the images array
+      pg.images = pg.images.filter(img => img !== imagePath);
+  
+      // Delete the image file from local storage if it exists
+      const fullPath = path.join(__dirname, "..", imagePath);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+        console.log(`Deleted file: ${fullPath}`);
+      } else {
+        console.warn(`File not found on disk: ${fullPath}, proceeding with database update`);
+      }
+  
+      await pg.save({ validateBeforeSave: false }); // Skip validation
+      res.status(200).json({ message: "Image deleted successfully", images: pg.images });
     } catch (error) {
-        console.error("❌ Error deleting image:", error);
-        res.status(500).json({ message: "Server error", error });
+      console.error("❌ Error deleting image:", error);
+      res.status(500).json({ message: "Server error", error });
     }
-};
-
+  };
 const deleteAllImages = async (req, res) => {
     try {
         const { pgId } = req.params;
@@ -150,5 +171,12 @@ const deleteAllImages = async (req, res) => {
     }
 };
 
-
-module.exports = { addPG, getAllPGs, getPGById, updatePG, deletePG, uploadPGImages, deletePGImage,deleteAllImages };
+const getLastPg = async (req, res) => {
+    try {
+        const lastPg = await PG.findOne().sort({ _id: -1 });
+        res.status(200).json(lastPg || {});
+      } catch (error) {
+        res.status(500).json({ message: "Server error: " + error.message });
+      }
+    };
+module.exports = { addPG, getAllPGs, getPGById, updatePG, deletePG, uploadPGImages, deletePGImage,deleteAllImages, getLastPg };

@@ -6,7 +6,7 @@ const pgSchema = new mongoose.Schema({
     name: { type: String, required: true },
     address: { type: String, required: true },
     ownerName: { type: String, required: true },
-    contact: { type: String, required: true },
+    contact: { type: String},
     rent: { type: Number, default: 0 },
     vacantRooms: { type: Number, default: 0 },
     images: [{ type: String }],

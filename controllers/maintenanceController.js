@@ -4,27 +4,59 @@ const Tenant = require("../models/Tenant");
 // Create Maintenance Request (Token Required)
 exports.createRequest = async (req, res) => {
   try {
-    console.log("Decoded Token (req.user):", req.user);
-
     const { category, description, availableDate } = req.body;
-    const tenantId = req.user.tid; // tid is a Number (e.g., 9)
+    const { tid, pgId, roomNo, mobileNumber } = req.user; // Fetch all required fields from token
 
-    if (!tenantId) {
-      return res.status(401).json({ message: "Invalid token: Tenant ID missing" });
+    // Validate required fields from token
+    if (!tid || !pgId) {
+      return res.status(401).json({
+        message: "Invalid token: Tenant ID (tid) and PG ID (pgId) are required",
+      });
     }
 
-    const newRequest = new Maintenance({
-      tid: tenantId, // Number (e.g., 9)
-      pgName: req.user.pgName,
-      roomNo: req.user.roomNo,
-      mobileNumber: req.user.mobileNumber,
-      category,
-      description,
-      availableDate,
-    });
+    // Optional: roomNo and mobileNumber can be fetched from token or Tenant model if not in token
+    if (!roomNo || !mobileNumber) {
+      const tenant = await Tenant.findOne({ tid });
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found in database" });
+      }
+      // Use tenant data if not provided in token
+      const finalRoomNo = roomNo || tenant.roomNo;
+      const finalMobileNumber = mobileNumber || tenant.mobileNumber;
 
-    await newRequest.save();
-    res.status(201).json({ message: "Maintenance request submitted", data: newRequest });
+      if (!finalRoomNo || !finalMobileNumber) {
+        return res.status(400).json({
+          message: "Room number and mobile number are required either in token or tenant data",
+        });
+      }
+
+      const newRequest = new Maintenance({
+        tid,
+        pgId, // Enforce pgId from token
+        roomNo: finalRoomNo,
+        mobileNumber: finalMobileNumber,
+        category,
+        description,
+        availableDate,
+      });
+
+      await newRequest.save();
+      res.status(201).json({ message: "Maintenance request submitted", data: newRequest });
+    } else {
+      // All fields are in token
+      const newRequest = new Maintenance({
+        tid,
+        pgId, // Enforce pgId from token
+        roomNo,
+        mobileNumber,
+        category,
+        description,
+        availableDate,
+      });
+
+      await newRequest.save();
+      res.status(201).json({ message: "Maintenance request submitted", data: newRequest });
+    }
   } catch (error) {
     console.error("Error in createRequest:", error);
     res.status(500).json({ message: "Server error: " + error.message });
@@ -67,41 +99,59 @@ exports.updateStatus = async (req, res) => {
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
+
+// Update Feedback (Tenant Only)
 exports.updateFeedback = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { remarks, rating } = req.body;
+  try {
+    const { id } = req.params;
+    const { remarks, rating } = req.body;
 
-        // Validate ID format
-        if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-            return res.status(400).json({ message: "Invalid ID format" });
-        }
-
-        // Validate required fields
-        if (!remarks || !rating) {
-            return res.status(400).json({ message: "Remarks and rating are required" });
-        }
-
-        console.log("Updating feedback for ID:", id);
-        console.log("New remarks:", remarks);
-        console.log("New rating:", rating);
-
-        // Update the maintenance request
-        const updatedRequest = await Maintenance.findByIdAndUpdate(
-            id,
-            { remarks, rating },
-            { new: true } // Return the updated document
-        );
-
-        console.log("Updated document:", updatedRequest);
-
-        if (!updatedRequest) {
-            return res.status(404).json({ message: "Maintenance request not found" });
-        }
-
-        res.json({ message: "Feedback updated successfully", data: updatedRequest });
-    } catch (error) {
-        console.error("Error updating feedback:", error);
-        res.status(500).json({ message: "Server error" });
+    // Validate ID format
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid ID format" });
     }
+
+    // Validate required fields
+    if (!remarks || !rating) {
+      return res.status(400).json({ message: "Remarks and rating are required" });
+    }
+
+    console.log("Updating feedback for ID:", id);
+    console.log("New remarks:", remarks);
+    console.log("New rating:", rating);
+
+    // Update the maintenance request
+    const updatedRequest = await Maintenance.findByIdAndUpdate(
+      id,
+      { remarks, rating },
+      { new: true } // Return the updated document
+    );
+
+    console.log("Updated document:", updatedRequest);
+
+    if (!updatedRequest) {
+      return res.status(404).json({ message: "Maintenance request not found" });
+    }
+
+    res.json({ message: "Feedback updated successfully", data: updatedRequest });
+  } catch (error) {
+    console.error("Error updating feedback:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Get Requests by pgId (Admin Only)
+exports.getRequestsByPgId = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    const { pgId } = req.params;
+    const requests = await Maintenance.find({ pgId });
+    res.status(200).json(requests);
+  } catch (error) {
+    console.error("Error in getRequestsByPgId:", error);
+    res.status(500).json({ message: "Server error: " + error.message });
+  }
 };
