@@ -14,6 +14,7 @@ const {
     deletePGImage,
     deleteAllImages,
     getLastPg,
+    getPropertiesByAddress,
 } = require("../controllers/pgController");
 
 // Route to upload PG images
@@ -35,7 +36,7 @@ router.get("/pgid/:pgId", getPGById); // ✅ Change route to avoid conflict with
 
 // Route to update a PG by pgId
 router.put("/update/:pgId", updatePG);
-
+router.get("/address/:address", getPropertiesByAddress);
 // Route to delete a PG by pgId
 router.delete("/delete/:pgId", deletePG);
 

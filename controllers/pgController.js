@@ -179,4 +179,28 @@ const getLastPg = async (req, res) => {
         res.status(500).json({ message: "Server error: " + error.message });
       }
     };
-module.exports = { addPG, getAllPGs, getPGById, updatePG, deletePG, uploadPGImages, deletePGImage,deleteAllImages, getLastPg };
+
+    const getPropertiesByAddress = async (req, res) => {
+      try {
+          console.log("Received params:", req.params); // Debugging line
+          const { address } = req.params;
+  
+          if (!address) {
+              return res.status(400).json({ message: "Address parameter is required." });
+          }
+  
+          // Ensure case-insensitive and exact match filtering
+          const properties = await PG.find({ address: { $regex: new RegExp(`^${address}$`, "i") } });
+  
+          if (properties.length === 0) {
+              return res.status(404).json({ message: `No PGs found for address: ${address}` });
+          }
+  
+          res.status(200).json(properties);
+      } catch (error) {
+          console.error("Error fetching PGs by address:", error);
+          res.status(500).json({ message: "Server error" });
+      }
+  };
+  
+module.exports = { addPG, getAllPGs, getPGById, updatePG, deletePG, uploadPGImages, deletePGImage,deleteAllImages, getLastPg, getPropertiesByAddress };
