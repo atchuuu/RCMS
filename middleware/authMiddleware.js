@@ -15,12 +15,11 @@ const verifyToken = async (req, res, next) => {
       return res.status(401).json({ message: "Invalid token format. Use Bearer <token>." });
     }
 
-    const decoded = jwt.verify(bearerToken, process.env.JWT_SECRET);
+    const decoded = jwt.verify(bearerToken, process.env.JWT_SECRET || "your_jwt_secret");
     console.log("Decoded JWT:", decoded);
 
     // Check the role in the token payload
     if (decoded.role === "admin") {
-      // For admin tokens, query the Admin model
       const admin = await Admin.findById(decoded.id).select("-password");
       console.log("Admin found:", admin);
 
@@ -28,7 +27,6 @@ const verifyToken = async (req, res, next) => {
         return res.status(404).json({ message: "Admin not found." });
       }
 
-      // Convert Mongoose document to plain object and ensure id and _id fields
       const adminData = admin.toObject();
       req.user = {
         ...adminData,
@@ -36,9 +34,8 @@ const verifyToken = async (req, res, next) => {
         _id: adminData._id.toString(),
         role: "admin",
       };
-      console.log("req.user set to:", req.user); // Debug log
+      console.log("req.user set to:", req.user);
     } else {
-      // For tenant tokens, query the Tenant model
       const tenant = await Tenant.findOne({ tid: decoded.tenantId });
       console.log("Tenant found:", tenant);
 
@@ -46,7 +43,6 @@ const verifyToken = async (req, res, next) => {
         return res.status(404).json({ message: "Tenant not found." });
       }
 
-      // Convert Mongoose document to plain object and ensure id and _id fields
       const tenantData = tenant.toObject();
       req.user = {
         ...tenantData,
@@ -54,7 +50,9 @@ const verifyToken = async (req, res, next) => {
         _id: tenantData._id.toString(),
         role: decoded.role || "tenant",
       };
-      console.log("req.user set to:", req.user); // Debug log
+      req.tenant = tenantData; // Explicitly set req.tenant for uploadMiddleware
+      console.log("req.user set to:", req.user);
+      console.log("req.tenant set to:", req.tenant);
     }
 
     next();

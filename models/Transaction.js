@@ -1,11 +1,13 @@
 const mongoose = require("mongoose");
 
-const TransactionSchema = new mongoose.Schema({
-  tid: { type: Number, required: true }, // Tenant ID
-  amountPaid: { type: Number, required: true }, // Amount Paid
-  utrNumber: { type: String, required: true, unique: true }, // UTR Number
-  paymentDate: { type: Date, default: Date.now }, // Payment Date
-  status: { type: String, enum: ["Paid", "Pending"], default: "Paid" } // Payment Status
+const transactionSchema = new mongoose.Schema({
+  tid: { type: Number, required: true },
+  amount: { type: Number, required: true },
+  utrNumber: { type: String, required: true, unique: true },
+  screenshotPath: { type: String, required: true },
+  paymentDate: { type: Date, default: Date.now },
+  nextDueDate: { type: Date, required: true },
+  status: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
 }, { timestamps: true });
 
-module.exports = mongoose.model("Transaction", TransactionSchema);
+module.exports = mongoose.model("Transaction", transactionSchema);

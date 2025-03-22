@@ -1,4 +1,5 @@
 const Tenant = require("../models/Tenant");
+const Transaction = require("../models/Transaction");
 const Invoice = require("../models/Invoice");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -7,7 +8,7 @@ const path=require("path");
 const fs = require("fs");
 const fsExtra = require("fs-extra");
 // 🟢 **1. Add a new tenant**
-
+const uploadMiddleware = require("../middleware/uploadPayement");
 
 const addTenant = async (req, res) => {
     try {
@@ -253,32 +254,95 @@ const uploadDocuments = async (req, res) => {
     }
   };
 
-  const addTransaction = async (req, res) => {
-    try {
-        const { tid } = req.params;
-        const { amount, utrNumber } = req.body;
+exports.getTenantProfile = async (req, res) => {
+  try {
+    const tenant = await Tenant.findById(req.user.tenantId);
+    if (!tenant) return res.status(404).json({ message: "Tenant not found" });
+    res.json(tenant);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
-        if (!amount || !utrNumber) {
-            return res.status(400).json({ message: "Amount and UTR number are required." });
-        }
+const getTransactions = async (req, res) => {
+  try {
+    const transactions = await Transaction.find({ tid: req.params.tid });
+    res.json({ transactions });
+  } catch (error) {
+    console.error("Error fetching transactions:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+const addTransaction = async (req, res) => {
+  console.log("Received request body:", req.body);
+  console.log("Tenant ID from params:", req.params.tid);
+  console.log("Tenant from token:", req.tenant);
 
-        const tenant = await Tenant.findOne({ tid });
-
-        if (!tenant) {
-            return res.status(404).json({ message: "Tenant not found" });
-        }
-
-        // Add transaction to the array
-        tenant.transactions.push({ amount, utrNumber, date: new Date() });
-
-        // Save updated tenant
-        await tenant.save();
-
-        res.status(200).json({ message: "Transaction added successfully.", transactions: tenant.transactions });
-    } catch (error) {
-        console.error("Error adding transaction:", error);
-        res.status(500).json({ message: "Internal Server Error", error: error.message });
+  try {
+    if (!req.tenant) {
+      console.log("Tenant not attached to req");
+      return res.status(500).json({ message: "Tenant data not available" });
     }
+
+    if (req.params.tid != req.tenant.tid) { // Compare as numbers
+      console.log(`TID mismatch: param=${req.params.tid}, token=${req.tenant.tid}`);
+      return res.status(403).json({ message: "Unauthorized: TID does not match token" });
+    }
+
+    if (!req.file) {
+      console.error("No file uploaded");
+      return res.status(400).json({ message: "Screenshot is required" });
+    }
+
+    const { utrNumber, amount, date, nextDueDate } = req.body;
+    console.log("File uploaded:", req.file);
+
+    const screenshotPath = path.join(
+      "uploads",
+      "payment_screenshots",
+      req.tenant.pgName,
+      req.tenant.roomNo,
+      `${new Date().toLocaleString("default", { month: "long" }).toLowerCase()}.jpg`
+    );
+
+    // Create the transaction object for the separate Transaction collection
+    const transaction = new Transaction({
+      tid: req.tenant.tid,
+      amount,
+      utrNumber,
+      screenshotPath,
+      paymentDate: date,
+      nextDueDate,
+    });
+
+    // Save to the Transaction collection
+    await transaction.save();
+
+    // Update the Tenant document: push the transaction into the embedded transactions array
+    const tenant = await Tenant.findOne({ tid: req.tenant.tid });
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    // Push the new transaction into the embedded transactions array
+    tenant.transactions.push({
+      amount: parseFloat(amount), // Ensure amount is a number
+      date: new Date(date),       // Use paymentDate as date
+      utrNumber,
+    });
+
+    // Update totalAmountDue and dueDate
+    tenant.totalAmountDue = 0;
+    tenant.dueDate = new Date(nextDueDate);
+    await tenant.save();
+
+    console.log("Updated tenant with new transaction:", tenant);
+
+    res.status(201).json({ transaction });
+  } catch (error) {
+    console.error("Transaction error:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
 };
 const deleteDocumentsByPgName = async (req, res) => {
     try {
@@ -341,5 +405,6 @@ module.exports = {
     getTenantProfile,
     uploadDocuments,
     addTransaction,
+    getTransactions,
     deleteDocumentsByPgName,
 };
