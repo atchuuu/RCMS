@@ -88,58 +88,57 @@ const deleteTenant = async (req, res) => {
 
 // 🟣 **5. Get tenant transactions**
 const getTenantTransactions = async (req, res) => {
-    try {
-        const { tid } = req.params;
+  try {
+    const { tid } = req.params;
 
-        // Fetch only the transactions array from the tenant document
-        const tenant = await Tenant.findOne({ tid }, { transactions: 1, _id: 0 });
-
-        if (!tenant) {
-            return res.status(404).json({ message: "Tenant not found" });
-        }
-
-        // Sort transactions in descending order (latest first)
-        const sortedTransactions = tenant.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-        res.status(200).json({ transactions: sortedTransactions });
-    } catch (error) {
-        console.error("Error fetching transactions:", error);
-        res.status(500).json({ message: "Internal Server Error", error: error.message });
+    if (parseInt(tid) !== req.user.tid) {
+      return res.status(403).json({ message: "Unauthorized: TID does not match token" });
     }
+
+    const tenant = await Tenant.findOne({ tid }, { transactions: 1, _id: 0 });
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    const sortedTransactions = tenant.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.status(200).json({ transactions: sortedTransactions });
+  } catch (error) {
+    console.error("Error fetching transactions:", error);
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
+  }
 };
 // 🟠 **6. Get tenant dashboard**
 const getTenantDashboard = async (req, res) => {
-    try {
-        const tenant = await Tenant.findById(req.user.userId).populate("invoices");
-
-        if (!tenant) {
-            return res.status(404).json({ message: "Tenant not found" });
-        }
-
-        res.json({
-            name: tenant.tname,
-            mobile: tenant.mobileNumber,
-            rentDue: tenant.totalAmountDue,
-            maintenanceDue: tenant.maintenanceAmount,
-            invoices: tenant.invoices,
-            idProofs: tenant.idCardUploaded
-        });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+  try {
+    const tenant = await Tenant.findOne({ tid: req.user.tid }).populate("invoices");
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
     }
+
+    res.json({
+      name: tenant.tname,
+      mobile: tenant.mobileNumber,
+      rentDue: tenant.totalAmountDue,
+      maintenanceDue: tenant.maintenanceAmount,
+      invoices: tenant.invoices,
+      idProofs: tenant.idCardUploaded,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 const getTenantProfile = async (req, res) => {
-    try {
-      const tenant = req.user; // Populated by verifyToken
-      if (!tenant) {
-        return res.status(404).json({ success: false, message: "Tenant not found" });
-      }
-      res.status(200).json(tenant);
-    } catch (error) {
-      console.error("Error fetching tenant profile:", error);
-      res.status(500).json({ success: false, message: "Server error" });
+  try {
+    const tenant = await Tenant.findOne({ tid: req.user.tid });
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: "Tenant not found" });
     }
-  };
+    res.status(200).json(tenant);
+  } catch (error) {
+    console.error("Error fetching tenant profile:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
   const tenantLogin = async (req, res) => {
     try {
@@ -193,7 +192,7 @@ const getTenantProfile = async (req, res) => {
   
 
 
-const uploadDocuments = async (req, res) => {
+  const uploadDocuments = async (req, res) => {
     try {
       const { pgName, roomNo } = req.body;
       const tname = req.user.tname;
@@ -206,7 +205,6 @@ const uploadDocuments = async (req, res) => {
         return res.status(400).json({ success: false, message: "Both Aadhar and ID Card must be uploaded" });
       }
   
-      // Define final paths
       const aadharFolder = path.join(__dirname, `../documents/aadhar card/${pgName}`);
       const idCardFolder = path.join(__dirname, `../documents/idcard/${pgName}`);
       const fileExtAadhar = req.files["aadharCard"] ? path.extname(req.files["aadharCard"][0].originalname) : "";
@@ -214,9 +212,8 @@ const uploadDocuments = async (req, res) => {
       const aadharFileName = `${tname}+${roomNo}${fileExtAadhar}`;
       const idCardFileName = `${tname}+${roomNo}${fileExtId}`;
   
-      // Move files from temp to final destination
       if (req.files["aadharCard"]) {
-        await fsExtra.ensureDir(aadharFolder); // Use fs-extra's ensureDir
+        await fsExtra.ensureDir(aadharFolder);
         await fsExtra.move(
           req.files["aadharCard"][0].path,
           path.join(aadharFolder, aadharFileName),
@@ -224,7 +221,7 @@ const uploadDocuments = async (req, res) => {
         );
       }
       if (req.files["idCard"]) {
-        await fsExtra.ensureDir(idCardFolder); // Use fs-extra's ensureDir
+        await fsExtra.ensureDir(idCardFolder);
         await fsExtra.move(
           req.files["idCard"][0].path,
           path.join(idCardFolder, idCardFileName),
@@ -241,8 +238,8 @@ const uploadDocuments = async (req, res) => {
         roomNo,
       };
   
-      const updatedTenant = await Tenant.findByIdAndUpdate(
-        req.user._id,
+      const updatedTenant = await Tenant.findOneAndUpdate(
+        { tid: req.user.tid }, // Use tid instead of _id
         { $set: updateData },
         { new: true }
       );
@@ -266,7 +263,13 @@ exports.getTenantProfile = async (req, res) => {
 
 const getTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find({ tid: req.params.tid });
+    const { tid } = req.params;
+
+    if (parseInt(tid) !== req.user.tid) {
+      return res.status(403).json({ message: "Unauthorized: TID does not match token" });
+    }
+
+    const transactions = await Transaction.find({ tid });
     res.json({ transactions });
   } catch (error) {
     console.error("Error fetching transactions:", error);
@@ -284,7 +287,7 @@ const addTransaction = async (req, res) => {
       return res.status(500).json({ message: "Tenant data not available" });
     }
 
-    if (req.params.tid != req.tenant.tid) { // Compare as numbers
+    if (parseInt(req.params.tid) !== req.tenant.tid) {
       console.log(`TID mismatch: param=${req.params.tid}, token=${req.tenant.tid}`);
       return res.status(403).json({ message: "Unauthorized: TID does not match token" });
     }
@@ -305,7 +308,6 @@ const addTransaction = async (req, res) => {
       `${new Date().toLocaleString("default", { month: "long" }).toLowerCase()}.jpg`
     );
 
-    // Create the transaction object for the separate Transaction collection
     const transaction = new Transaction({
       tid: req.tenant.tid,
       amount,
@@ -315,29 +317,24 @@ const addTransaction = async (req, res) => {
       nextDueDate,
     });
 
-    // Save to the Transaction collection
     await transaction.save();
 
-    // Update the Tenant document: push the transaction into the embedded transactions array
     const tenant = await Tenant.findOne({ tid: req.tenant.tid });
     if (!tenant) {
       return res.status(404).json({ message: "Tenant not found" });
     }
 
-    // Push the new transaction into the embedded transactions array
     tenant.transactions.push({
-      amount: parseFloat(amount), // Ensure amount is a number
-      date: new Date(date),       // Use paymentDate as date
+      amount: parseFloat(amount),
+      date: new Date(date),
       utrNumber,
     });
 
-    // Update totalAmountDue and dueDate
-    tenant.totalAmountDue = 0;
+    // Don’t update totalAmountDue here; wait for admin approval
     tenant.dueDate = new Date(nextDueDate);
     await tenant.save();
 
     console.log("Updated tenant with new transaction:", tenant);
-
     res.status(201).json({ transaction });
   } catch (error) {
     console.error("Transaction error:", error.message);

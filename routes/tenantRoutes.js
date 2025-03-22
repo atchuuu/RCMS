@@ -1,53 +1,37 @@
 const express = require("express");
 const {
-    tenantLogin, // ✅ Import tenantLogin
-    addTenant,
-    getAllTenants,
-    updateTenant,
-    deleteTenant,
-    getTenantTransactions,
-    getTenantDashboard,
-    getTenantProfile,
-    addTransaction,
-    deleteDocumentsByPgName,
+  tenantLogin,
+  addTenant,
+  getAllTenants,
+  updateTenant,
+  deleteTenant,
+  getTenantTransactions,
+  getTenantDashboard,
+  getTenantProfile,
+  addTransaction,
+  deleteDocumentsByPgName,
+  uploadDocuments,
 } = require("../controllers/tenantController");
-
 const { verifyToken } = require("../middleware/authMiddleware");
-
 const router = express.Router();
-
 const uploadId = require("../middleware/uploadId");
-const { uploadDocuments } = require("../controllers/tenantController");
 const uploadMiddleware = require("../middleware/uploadPayement");
-// ✅ Tenant Login Route
-router.post("/login", tenantLogin);
 
+router.post("/login", tenantLogin);
 router.post("/add", addTenant);
 router.get("/", getAllTenants);
 router.put("/update/:tid", updateTenant);
 router.delete("/delete/:tid", deleteTenant);
-router.get("/dashboard", getTenantDashboard);
+router.get("/dashboard", verifyToken, getTenantDashboard);
 router.get("/me", verifyToken, getTenantProfile);
 router.get("/:tid/transactions", verifyToken, getTenantTransactions);
 router.post("/:tid/transactions", verifyToken, uploadMiddleware, addTransaction);
-
 router.post(
-    "/upload",
-    verifyToken,
-    (req, res, next) => {
-      console.log("Received request body:", req.body);
-      console.log("Decoded user:", req.user);
-      
-      uploadId.fields([{ name: "aadharCard" }, { name: "idCard" }])(req, res, (err) => {
-        if (err) {
-          return res.status(400).json({ success: false, message: err.message });
-        }
-        next();
-      });
-    },
-    uploadDocuments
-  );
-  
-  router.post("/delete-documents", verifyToken, deleteDocumentsByPgName); // New route
+  "/upload",
+  verifyToken,
+  uploadId.fields([{ name: "aadharCard" }, { name: "idCard" }]),
+  uploadDocuments
+);
+router.post("/delete-documents", verifyToken, deleteDocumentsByPgName);
 
 module.exports = router;

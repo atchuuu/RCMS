@@ -1,19 +1,18 @@
 const express = require("express");
 const router = express.Router();
+const { adminLogin } = require("../controllers/authController"); // Use authController
 const {
-  adminLogin,
   getAdminProfile,
   verifyTenant,
   getPendingTransactions,
   approveTransaction,
 } = require("../controllers/adminController");
-const authMiddleware = require("../middleware/authMiddleware"); // General auth middleware
-const adminMiddleware = require("../middleware/adminMiddleware"); // Admin-specific middleware
+const { verifyToken, verifyTokenAdmin } = require("../middleware/authMiddleware");
 
 router.post("/login", adminLogin);
-router.get("/profile", authMiddleware, adminMiddleware, getAdminProfile);
-router.post("/verify-tenant/:tenantId", authMiddleware, adminMiddleware, verifyTenant);
-router.get("/pending-transactions", authMiddleware, adminMiddleware, getPendingTransactions);
-router.post("/approve-transaction/:transactionId", authMiddleware, adminMiddleware, approveTransaction);
+router.get("/profile", verifyTokenAdmin, getAdminProfile);
+router.post("/verify-tenant/:tenantId", verifyTokenAdmin, verifyTenant);
+router.get("/pending-transactions", verifyTokenAdmin, getPendingTransactions);
+router.post("/approve-transaction/:transactionId", verifyTokenAdmin, approveTransaction);
 
 module.exports = router;

@@ -76,7 +76,6 @@ const verifyTenant = async (req, res) => {
 // 🟢 Get Pending Transactions
 const getPendingTransactions = async (req, res) => {
   try {
-    // Ensure only admins can access this endpoint (handled by middleware)
     const transactions = await Transaction.find({ status: "Pending" }).populate("tid", "tname pgName roomNo");
     res.json({ transactions });
   } catch (error) {

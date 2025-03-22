@@ -21,14 +21,18 @@ const addPG = async (req, res) => {
     }
 };
 // Get all PGs
+
+
 const getAllPGs = async (req, res) => {
-    try {
-        const pgs = await PG.find();
-        res.status(200).json(pgs);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+  try {
+    const pgs = await PG.find();
+    res.status(200).json(pgs); // Return full PG objects: [{ name, address, rent, ... }]
+  } catch (error) {
+    console.error("Error fetching PGs:", error.message);
+    res.status(500).json({ error: error.message });
+  }
 };
+
 
 
 const getPGById = async (req, res) => {
