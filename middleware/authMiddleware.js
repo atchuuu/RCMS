@@ -2,61 +2,59 @@ const jwt = require("jsonwebtoken");
 const Tenant = require("../models/Tenant");
 const Admin = require("../models/Admin");
 
-const verifyToken = async (req, res, next, options = { requireAdmin: false }) => {
+const verifyToken = async (req, res, next, options = { requiredRole: null }) => {
   const tokenHeader = req.header("Authorization");
+  console.log("Authorization Header:", tokenHeader); // Debug
 
   if (!tokenHeader) {
     return res.status(401).json({ message: "Access denied. No token provided." });
   }
 
   const token = tokenHeader.replace("Bearer ", "");
+  console.log("Extracted Token:", token); // Debug
+
   if (!token) {
     return res.status(401).json({ message: "Invalid token format. Use Bearer <token>." });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log("Decoded JWT:", decoded);
+    console.log("Decoded JWT:", decoded); // Debug
 
-    if (options.requireAdmin && decoded.role !== "admin") {
-      return res.status(403).json({ message: "Access denied: Admin role required" });
-    }
-
-    if (decoded.role === "admin") {
+    if (decoded.role === "admin" || decoded.role === "superadmin") {
       const admin = await Admin.findById(decoded.id).select("-password");
       if (!admin) {
         return res.status(404).json({ message: "Admin not found." });
       }
-      const adminData = admin.toObject();
       req.user = {
-        id: adminData._id.toString(),
-        _id: adminData._id.toString(),
-        email: adminData.email,
-        role: "admin",
+        id: admin._id.toString(),
+        email: admin.email,
+        role: admin.role,
       };
-      console.log("req.user set to (admin):", req.user);
+      console.log("req.user:", req.user); // Debug
+
+      if (options.requiredRole) {
+        const requiredRoles = Array.isArray(options.requiredRole)
+          ? options.requiredRole
+          : [options.requiredRole];
+        console.log("Required Roles:", requiredRoles); // Debug
+        if (!requiredRoles.includes(req.user.role)) {
+          return res.status(403).json({ message: "Access denied: admin,superadmin role required" });
+        }
+      }
     } else {
-      const tenant = await Tenant.findOne({ tid: decoded.tenantId });
+      const tenant = await Tenant.findById(decoded.id);
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found." });
       }
-      const tenantData = tenant.toObject();
       req.user = {
-        tid: tenantData.tid, // Primary identifier for tenants
-        _id: tenantData._id.toString(), // Keep for reference
-        role: decoded.role || "tenant",
-        tname: tenantData.tname,
-        email: tenantData.email,
-        mobileNumber: tenantData.mobileNumber,
-        pgName: tenantData.pgName,
-        roomNo: tenantData.roomNo,
-        documentsUploaded: tenantData.documentsUploaded,
-        idCardUploaded: tenantData.idCardUploaded,
-        isVerified: tenantData.isVerified,
+        id: tenant._id.toString(),
+        role: "tenant",
+        // Add other tenant fields as needed
       };
-      req.tenant = tenantData; // Full tenant object
-      console.log("req.user set to (tenant):", req.user);
-      console.log("req.tenant set to:", req.tenant);
+      if (options.requiredRole) {
+        return res.status(403).json({ message: "Access denied: Admin role required" });
+      }
     }
 
     next();
@@ -73,5 +71,7 @@ const createVerifyToken = (options = {}) => (req, res, next) => verifyToken(req,
 
 module.exports = {
   verifyToken: createVerifyToken(),
-  verifyTokenAdmin: createVerifyToken({ requireAdmin: true }),
+  verifyTokenAdmin: createVerifyToken({ requiredRole: "admin" }),
+  verifyTokenSuperAdmin: createVerifyToken({ requiredRole: "superadmin" }),
+  verifyTokenAnyAdmin: createVerifyToken({ requiredRole: ["admin", "superadmin"] }),
 };

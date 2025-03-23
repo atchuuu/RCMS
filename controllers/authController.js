@@ -3,7 +3,6 @@ const Admin = require("../models/Admin");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 
-// 🛠 Generate JWT Token
 const generateToken = (user, role) => {
   return jwt.sign(
     { id: user._id, email: user.email, role },
@@ -12,19 +11,16 @@ const generateToken = (user, role) => {
   );
 };
 
-// ✅ Tenant Login (by email or mobile number)
 exports.tenantLogin = async (req, res) => {
   try {
     const { identifier, password } = req.body;
 
-    // 🔍 Find tenant by email OR mobile number
     const tenant = await Tenant.findOne({
       $or: [{ email: identifier }, { mobileNumber: identifier }],
     });
 
     if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
 
-    // 🔑 Compare password
     const isMatch = await bcrypt.compare(password, tenant.password);
     if (!isMatch) return res.status(400).json({ success: false, message: "Invalid credentials" });
 
@@ -43,7 +39,6 @@ exports.tenantLogin = async (req, res) => {
   }
 };
 
-// ✅ Admin Login
 exports.adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -56,11 +51,11 @@ exports.adminLogin = async (req, res) => {
 
     res.json({
       success: true,
-      token: generateToken(admin, "admin"),
+      token: generateToken(admin, admin.role),
       admin: {
         id: admin._id,
-        name: admin.name,
         email: admin.email,
+        role: admin.role,
       },
     });
   } catch (error) {

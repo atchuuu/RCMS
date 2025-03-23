@@ -1,34 +1,9 @@
-require("dotenv").config(); // Load .env variables
-const jwt = require("jsonwebtoken");
+require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const Admin = require("../models/Admin");
 const Tenant = require("../models/Tenant");
 const Transaction = require("../models/Transaction");
 
-// 🟢 Admin Login
-const adminLogin = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const admin = await Admin.findOne({ email });
-
-    if (!admin) return res.status(404).json({ message: "Admin not found" });
-
-    const isMatch = await bcrypt.compare(password, admin.password);
-    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
-
-    // ✅ Generate JWT Token
-    const token = jwt.sign({ id: admin._id, role: "admin" }, process.env.JWT_SECRET, {
-      expiresIn: "7d", // 7 days expiry
-    });
-
-    res.json({ token, admin: { id: admin._id, email: admin.email } });
-  } catch (error) {
-    console.error("Admin login error:", error.message);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-// ✅ Get Admin Profile
 const getAdminProfile = async (req, res) => {
   try {
     if (!req.user || (!req.user.id && !req.user._id)) {
@@ -53,7 +28,6 @@ const getAdminProfile = async (req, res) => {
   }
 };
 
-// 🟢 Verify Tenant
 const verifyTenant = async (req, res) => {
   try {
     const { tenantId } = req.params;
@@ -75,13 +49,13 @@ const verifyTenant = async (req, res) => {
 
 const getPendingTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find({ status: 'Pending' });
-    const tenants = await Tenant.find({}, 'tid tname pgName roomNo pgId');
-    console.log('Fetched Tenants:', tenants);
-    const tenantMap = new Map(tenants.map(tenant => [Number(tenant.tid), tenant]));
-    console.log('Tenant Map:', Array.from(tenantMap.entries()));
+    const transactions = await Transaction.find({ status: "Pending" });
+    const tenants = await Tenant.find({}, "tid tname pgName roomNo pgId");
+    console.log("Fetched Tenants:", tenants);
+    const tenantMap = new Map(tenants.map((tenant) => [Number(tenant.tid), tenant]));
+    console.log("Tenant Map:", Array.from(tenantMap.entries()));
 
-    const pendingTransactions = transactions.map(txn => {
+    const pendingTransactions = transactions.map((txn) => {
       const tenant = tenantMap.get(txn.tid);
       console.log(`TID ${txn.tid}:`, tenant);
       return {
@@ -89,21 +63,21 @@ const getPendingTransactions = async (req, res) => {
         tid: txn.tid,
         amount: txn.amount,
         utrNumber: txn.utrNumber,
-        screenshotPath: txn.screenshotPath || '',
+        screenshotPath: txn.screenshotPath || "",
         paymentDate: txn.paymentDate,
         status: txn.status,
-        tname: tenant?.tname || 'Unknown',
-        pgName: tenant?.pgName || 'N/A',
-        roomNo: tenant?.roomNo || 'N/A',
-        pgId: tenant?.pgId || 'N/A',
+        tname: tenant?.tname || "Unknown",
+        pgName: tenant?.pgName || "N/A",
+        roomNo: tenant?.roomNo || "N/A",
+        pgId: tenant?.pgId || "N/A",
       };
     });
 
-    console.log('Pending Transactions:', pendingTransactions);
+    console.log("Pending Transactions:", pendingTransactions);
     res.json({ transactions: pendingTransactions });
   } catch (error) {
-    console.error('Error fetching pending transactions:', error.message);
-    res.status(500).json({ message: 'Server error: ' + error.message });
+    console.error("Error fetching pending transactions:", error.message);
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
 
@@ -142,15 +116,15 @@ const approveTransaction = async (req, res) => {
 const getAllTransactions = async (req, res) => {
   try {
     const transactions = await Transaction.find();
-    const tenants = await Tenant.find({}, 'tid tname pgName roomNo pgId');
-    console.log('Fetched Tenants:', tenants);
-    const tenantMap = new Map(tenants.map(tenant => [Number(tenant.tid), tenant]));
-    console.log('Tenant Map:', Array.from(tenantMap.entries()));
+    const tenants = await Tenant.find({}, "tid tname pgName roomNo pgId");
+    console.log("Fetched Tenants:", tenants);
+    const tenantMap = new Map(tenants.map((tenant) => [Number(tenant.tid), tenant]));
+    console.log("Tenant Map:", Array.from(tenantMap.entries()));
 
     const groupedTransactions = transactions.reduce((acc, txn) => {
       const tenant = tenantMap.get(txn.tid);
       console.log(`TID ${txn.tid}:`, tenant);
-      const key = `${tenant?.pgName || 'Unknown'}-${tenant?.pgId || 'N/A'}`;
+      const key = `${tenant?.pgName || "Unknown"}-${tenant?.pgId || "N/A"}`;
       if (!acc[key]) {
         acc[key] = [];
       }
@@ -159,30 +133,88 @@ const getAllTransactions = async (req, res) => {
         tid: txn.tid,
         amount: txn.amount,
         utrNumber: txn.utrNumber,
-        screenshotPath: txn.screenshotPath || '',
+        screenshotPath: txn.screenshotPath || "",
         paymentDate: txn.paymentDate,
         status: txn.status,
-        tname: tenant?.tname || 'Unknown',
-        pgName: tenant?.pgName || 'N/A',
-        roomNo: tenant?.roomNo || 'N/A',
-        pgId: tenant?.pgId || 'N/A',
+        tname: tenant?.tname || "Unknown",
+        pgName: tenant?.pgName || "N/A",
+        roomNo: tenant?.roomNo || "N/A",
+        pgId: tenant?.pgId || "N/A",
       });
       return acc;
     }, {});
 
-    console.log('All Transactions:', groupedTransactions);
+    console.log("All Transactions:", groupedTransactions);
     res.json({ transactions: groupedTransactions });
   } catch (error) {
-    console.error('Error fetching all transactions:', error.message);
-    res.status(500).json({ message: 'Server error: ' + error.message });
+    console.error("Error fetching all transactions:", error.message);
+    res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+
+const addAdmin = async (req, res) => {
+  try {
+    const { email, name, password } = req.body;
+    if (!email || !name || !password) {
+      return res.status(400).json({ message: "Email, name, and password are required" });
+    }
+
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      return res.status(400).json({ message: "Admin already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newAdmin = new Admin({ email, name, password: hashedPassword, role: "admin" });
+    await newAdmin.save();
+
+    res.status(201).json({
+      message: "Admin added successfully",
+      admin: { id: newAdmin._id, email: newAdmin.email, name: newAdmin.name },
+    });
+  } catch (error) {
+    console.error("Error adding admin:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+const getAllAdmins = async (req, res) => {
+  try {
+    const admins = await Admin.find().select("email name role createdAt"); // Include name
+    res.status(200).json(admins);
+  } catch (error) {
+    console.error("Error fetching admins:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+const deleteAdmin = async (req, res) => {
+  try {
+    const { adminId } = req.params;
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    if (admin.role === "superadmin") {
+      return res.status(403).json({ message: "Cannot delete a superadmin" });
+    }
+
+    await Admin.deleteOne({ _id: adminId });
+    res.status(200).json({ message: "Admin deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting admin:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
 module.exports = {
-  adminLogin,
   getAdminProfile,
   verifyTenant,
   getPendingTransactions,
   approveTransaction,
   getAllTransactions,
+  addAdmin,
+  deleteAdmin,
+  getAllAdmins,
 };
