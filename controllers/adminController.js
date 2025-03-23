@@ -73,18 +73,40 @@ const verifyTenant = async (req, res) => {
   }
 };
 
-// 🟢 Get Pending Transactions
 const getPendingTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find({ status: "Pending" }).populate("tid", "tname pgName roomNo");
-    res.json({ transactions });
+    const transactions = await Transaction.find({ status: 'Pending' });
+    const tenants = await Tenant.find({}, 'tid tname pgName roomNo pgId');
+    console.log('Fetched Tenants:', tenants);
+    const tenantMap = new Map(tenants.map(tenant => [Number(tenant.tid), tenant]));
+    console.log('Tenant Map:', Array.from(tenantMap.entries()));
+
+    const pendingTransactions = transactions.map(txn => {
+      const tenant = tenantMap.get(txn.tid);
+      console.log(`TID ${txn.tid}:`, tenant);
+      return {
+        _id: txn._id,
+        tid: txn.tid,
+        amount: txn.amount,
+        utrNumber: txn.utrNumber,
+        screenshotPath: txn.screenshotPath || '',
+        paymentDate: txn.paymentDate,
+        status: txn.status,
+        tname: tenant?.tname || 'Unknown',
+        pgName: tenant?.pgName || 'N/A',
+        roomNo: tenant?.roomNo || 'N/A',
+        pgId: tenant?.pgId || 'N/A',
+      };
+    });
+
+    console.log('Pending Transactions:', pendingTransactions);
+    res.json({ transactions: pendingTransactions });
   } catch (error) {
-    console.error("Error fetching pending transactions:", error.message);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error('Error fetching pending transactions:', error.message);
+    res.status(500).json({ message: 'Server error: ' + error.message });
   }
 };
 
-// 🟢 Approve Transaction
 const approveTransaction = async (req, res) => {
   try {
     const { transactionId } = req.params;
@@ -107,7 +129,7 @@ const approveTransaction = async (req, res) => {
     }
 
     tenant.totalAmountDue = Math.max(0, tenant.totalAmountDue - transaction.amount);
-    tenant.dueDate = new Date(transaction.nextDueDate);
+    tenant.dueDate = new Date(transaction.nextDueDate || Date.now());
     await tenant.save();
 
     res.json({ message: "Transaction approved", transaction, tenant });
@@ -117,10 +139,50 @@ const approveTransaction = async (req, res) => {
   }
 };
 
+const getAllTransactions = async (req, res) => {
+  try {
+    const transactions = await Transaction.find();
+    const tenants = await Tenant.find({}, 'tid tname pgName roomNo pgId');
+    console.log('Fetched Tenants:', tenants);
+    const tenantMap = new Map(tenants.map(tenant => [Number(tenant.tid), tenant]));
+    console.log('Tenant Map:', Array.from(tenantMap.entries()));
+
+    const groupedTransactions = transactions.reduce((acc, txn) => {
+      const tenant = tenantMap.get(txn.tid);
+      console.log(`TID ${txn.tid}:`, tenant);
+      const key = `${tenant?.pgName || 'Unknown'}-${tenant?.pgId || 'N/A'}`;
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+      acc[key].push({
+        _id: txn._id,
+        tid: txn.tid,
+        amount: txn.amount,
+        utrNumber: txn.utrNumber,
+        screenshotPath: txn.screenshotPath || '',
+        paymentDate: txn.paymentDate,
+        status: txn.status,
+        tname: tenant?.tname || 'Unknown',
+        pgName: tenant?.pgName || 'N/A',
+        roomNo: tenant?.roomNo || 'N/A',
+        pgId: tenant?.pgId || 'N/A',
+      });
+      return acc;
+    }, {});
+
+    console.log('All Transactions:', groupedTransactions);
+    res.json({ transactions: groupedTransactions });
+  } catch (error) {
+    console.error('Error fetching all transactions:', error.message);
+    res.status(500).json({ message: 'Server error: ' + error.message });
+  }
+};
+
 module.exports = {
   adminLogin,
   getAdminProfile,
   verifyTenant,
   getPendingTransactions,
   approveTransaction,
+  getAllTransactions,
 };

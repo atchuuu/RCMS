@@ -6,6 +6,7 @@ const {
   verifyTenant,
   getPendingTransactions,
   approveTransaction,
+  getAllTransactions,
 } = require("../controllers/adminController");
 const { verifyToken, verifyTokenAdmin } = require("../middleware/authMiddleware");
 
@@ -14,5 +15,5 @@ router.get("/profile", verifyTokenAdmin, getAdminProfile);
 router.post("/verify-tenant/:tenantId", verifyTokenAdmin, verifyTenant);
 router.get("/pending-transactions", verifyTokenAdmin, getPendingTransactions);
 router.post("/approve-transaction/:transactionId", verifyTokenAdmin, approveTransaction);
-
+router.get("/all-transactions", verifyTokenAdmin, getAllTransactions);
 module.exports = router;
