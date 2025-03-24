@@ -182,41 +182,61 @@ const tenantLogin = async (req, res) => {
 const uploadDocuments = async (req, res) => {
   try {
     const { pgName, roomNo } = req.body;
-    const tname = req.user.tname; // Now available from middleware
+    const tname = req.user.tname;
 
     if (!tname || !pgName || !roomNo) {
       return res.status(400).json({ success: false, message: "Missing required fields: tname, pgName, or roomNo" });
     }
 
-    if (!req.files || (!req.files["aadharFront"] || !req.files["aadharBack"] || !req.files["idCard"])) {
+    if (!req.files || !req.files["aadharFront"] || !req.files["aadharBack"] || !req.files["idCard"]) {
       return res.status(400).json({ success: false, message: "Aadhar Front, Back, and ID Card must be uploaded" });
     }
 
-    const aadharFrontFolder = path.join(__dirname, `../documents/aadhar/${pgName}/front`);
-    const aadharBackFolder = path.join(__dirname, `../documents/aadhar/${pgName}/back`);
-    const idCardFolder = path.join(__dirname, `../documents/idcard/${pgName}`);
+    const baseDocPath = path.join(__dirname, "../documents");
+    const aadharFrontFolder = path.join(baseDocPath, "aadhar", pgName, "front");
+    const aadharBackFolder = path.join(baseDocPath, "aadhar", pgName, "back");
+    const idCardFolder = path.join(baseDocPath, "idcard", pgName);
 
+    // Get individual file extensions
     const fileExtAadharFront = path.extname(req.files["aadharFront"][0].originalname);
     const fileExtAadharBack = path.extname(req.files["aadharBack"][0].originalname);
     const fileExtId = path.extname(req.files["idCard"][0].originalname);
 
-    const fileName = `${tname}+${roomNo}${fileExtAadharFront}`;
+    // Create unique filenames for each file with their respective extensions
+    const aadharFrontFileName = `${tname}+${roomNo}${fileExtAadharFront}`;
+    const aadharBackFileName = `${tname}+${roomNo}${fileExtAadharBack}`;
+    const idCardFileName = `${tname}+${roomNo}${fileExtId}`;
 
+    // Move Aadhaar Front
     await fsExtra.ensureDir(aadharFrontFolder);
-    await fsExtra.move(req.files["aadharFront"][0].path, path.join(aadharFrontFolder, fileName), { overwrite: true });
+    await fsExtra.move(
+      req.files["aadharFront"][0].path,
+      path.join(aadharFrontFolder, aadharFrontFileName),
+      { overwrite: true }
+    );
 
+    // Move Aadhaar Back
     await fsExtra.ensureDir(aadharBackFolder);
-    await fsExtra.move(req.files["aadharBack"][0].path, path.join(aadharBackFolder, fileName), { overwrite: true });
+    await fsExtra.move(
+      req.files["aadharBack"][0].path,
+      path.join(aadharBackFolder, aadharBackFileName),
+      { overwrite: true }
+    );
 
+    // Move ID Card
     await fsExtra.ensureDir(idCardFolder);
-    await fsExtra.move(req.files["idCard"][0].path, path.join(idCardFolder, fileName), { overwrite: true });
+    await fsExtra.move(
+      req.files["idCard"][0].path,
+      path.join(idCardFolder, idCardFileName),
+      { overwrite: true }
+    );
 
     const updateData = {
       documentsUploaded: true,
       idCardUploaded: true,
-      aadharFrontPath: path.join(aadharFrontFolder, fileName),
-      aadharBackPath: path.join(aadharBackFolder, fileName),
-      idCardPath: path.join(idCardFolder, fileName),
+      aadharFrontPath: path.join("documents", "aadhar", pgName, "front", aadharFrontFileName),
+      aadharBackPath: path.join("documents", "aadhar", pgName, "back", aadharBackFileName),
+      idCardPath: path.join("documents", "idcard", pgName, idCardFileName),
       pgName,
       roomNo,
     };
@@ -229,11 +249,10 @@ const uploadDocuments = async (req, res) => {
 
     res.status(200).json({ success: true, message: "Documents uploaded successfully!", updatedTenant });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server error", error });
+    console.error("Error in uploadDocuments:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
-
 const getTransactions = async (req, res) => {
   try {
     const { tid } = req.params;
@@ -300,53 +319,7 @@ const addTransaction = async (req, res) => {
   }
 };
 
-const deleteDocumentsByPgName = async (req, res) => {
-  try {
-    const { pgName } = req.body;
 
-    if (!pgName) {
-      return res.status(400).json({ success: false, message: "PG Name is required" });
-    }
-
-    const aadharPath = path.join(__dirname, `../documents/aadhar/${pgName}`);
-    const idCardPath = path.join(__dirname, `../documents/idcard/${pgName}`);
-
-    try {
-      await access(aadharPath);
-      await fsExtra.remove(aadharPath);
-    } catch (err) {
-      if (err.code !== "ENOENT") throw err;
-    }
-
-    try {
-      await access(idCardPath);
-      await fsExtra.remove(idCardPath);
-    } catch (err) {
-      if (err.code !== "ENOENT") throw err;
-    }
-
-    await Tenant.updateMany(
-      { pgName },
-      {
-        $set: {
-          documentsUploaded: false,
-          idCardUploaded: false,
-          aadharFrontPath: null,
-          aadharBackPath: null,
-          idCardPath: null,
-        },
-      }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: `Documents for PG '${pgName}' deleted successfully`,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server error", error });
-  }
-};
 
 module.exports = {
   tenantLogin,
@@ -360,5 +333,5 @@ module.exports = {
   uploadDocuments,
   addTransaction,
   getTransactions,
-  deleteDocumentsByPgName,
+  
 };

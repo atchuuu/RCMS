@@ -21,7 +21,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const fileExt = path.extname(file.originalname);
-    const fileName = `${Date.now()}${fileExt}`; // Temporary filename
+    const fileName = `${Date.now()}${fileExt}`; // Temporary filename with original extension
     cb(null, fileName);
   },
 });

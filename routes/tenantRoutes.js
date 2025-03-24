@@ -9,7 +9,7 @@ const {
   getTenantDashboard,
   getTenantProfile,
   addTransaction,
-  deleteDocumentsByPgName,
+  
   uploadDocuments,
 } = require("../controllers/tenantController");
 const { verifyToken } = require("../middleware/authMiddleware");
@@ -37,6 +37,5 @@ router.post("/:tid/transactions", verifyToken, uploadMiddleware, addTransaction)
     uploadDocuments
   );
 
-router.post("/delete-documents", verifyToken, deleteDocumentsByPgName);
 
 module.exports = router;

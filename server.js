@@ -18,7 +18,6 @@ const maintenanceRoutes = require("./routes/maintenanceRoutes");
 
 dotenv.config();
 
-// Create a single Express app
 const app = express();
 
 // MongoDB Connection
@@ -36,7 +35,7 @@ const sslOptions = {
 // Middleware
 app.use(
   cors({
-    origin: ["https://localhost:3000", "https://localhost:3001"], // Update for your frontend ports
+    origin: ["https://localhost:3000", "https://localhost:3001"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -44,6 +43,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/api/documents", express.static(path.join(__dirname, "documents")));
 
 // Routes
 app.use("/api/tenant", tenantRoutes);
@@ -59,6 +59,12 @@ app.use("/api/maintenance", maintenanceRoutes);
 app.use((req, res) => {
   console.log(`Route not found: ${req.method} ${req.url}`);
   res.status(404).json({ message: "Route not found" });
+});
+
+// Error Handler
+app.use((err, req, res, next) => {
+  console.error("Server error:", err.stack);
+  res.status(500).json({ message: "Internal server error" });
 });
 
 // Start Server on Port 5000
