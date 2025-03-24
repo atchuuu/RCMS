@@ -51,6 +51,7 @@ const verifyToken = async (req, res, next, options = { requiredRole: null }) => 
       req.user = {
         tid: tenant.tid, // Use tid instead of _id
         email: tenant.email,
+        pgId: tenant.pgId,
         tname: tenant.tname, // Include tname for uploadDocuments
         role: "tenant",
       };

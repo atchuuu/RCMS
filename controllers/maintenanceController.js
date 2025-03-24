@@ -1,11 +1,16 @@
 const Maintenance = require("../models/Maintenance");
 const Tenant = require("../models/Tenant");
-
-// Create Maintenance Request (Token Required)
+const PG =require("../models/PG")
+// Create Maintenance Request (Tenant Only)
 exports.createRequest = async (req, res) => {
   try {
     const { category, description, availableDate } = req.body;
-    const { tid, pgId, roomNo, mobileNumber } = req.user; // Fetch all required fields from token
+    const { tid, pgId, roomNo, mobileNumber } = req.user;
+
+    // Validate tenant role
+    if (req.user.role !== "tenant") {
+      return res.status(403).json({ message: "Unauthorized: Tenant access only" });
+    }
 
     // Validate required fields from token
     if (!tid || !pgId) {
@@ -14,59 +19,55 @@ exports.createRequest = async (req, res) => {
       });
     }
 
-    // Optional: roomNo and mobileNumber can be fetched from token or Tenant model if not in token
-    if (!roomNo || !mobileNumber) {
-      const tenant = await Tenant.findOne({ tid });
-      if (!tenant) {
-        return res.status(404).json({ message: "Tenant not found in database" });
-      }
-      // Use tenant data if not provided in token
-      const finalRoomNo = roomNo || tenant.roomNo;
-      const finalMobileNumber = mobileNumber || tenant.mobileNumber;
-
-      if (!finalRoomNo || !finalMobileNumber) {
-        return res.status(400).json({
-          message: "Room number and mobile number are required either in token or tenant data",
-        });
-      }
-
-      const newRequest = new Maintenance({
-        tid,
-        pgId, // Enforce pgId from token
-        roomNo: finalRoomNo,
-        mobileNumber: finalMobileNumber,
-        category,
-        description,
-        availableDate,
-      });
-
-      await newRequest.save();
-      res.status(201).json({ message: "Maintenance request submitted", data: newRequest });
-    } else {
-      // All fields are in token
-      const newRequest = new Maintenance({
-        tid,
-        pgId, // Enforce pgId from token
-        roomNo,
-        mobileNumber,
-        category,
-        description,
-        availableDate,
-      });
-
-      await newRequest.save();
-      res.status(201).json({ message: "Maintenance request submitted", data: newRequest });
+    // Fetch tenant data if roomNo or mobileNumber missing
+    const tenant = await Tenant.findOne({ tid });
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found in database" });
     }
+
+    const finalRoomNo = roomNo || tenant.roomNo;
+    const finalMobileNumber = mobileNumber || tenant.mobileNumber;
+
+    if (!finalRoomNo || !finalMobileNumber) {
+      return res.status(400).json({
+        message: "Room number and mobile number are required",
+      });
+    }
+
+    const newRequest = new Maintenance({
+      tid,
+      pgId,
+      roomNo: finalRoomNo,
+      mobileNumber: finalMobileNumber,
+      category,
+      description,
+      availableDate,
+    });
+
+    await newRequest.save();
+    res.status(201).json({ 
+      message: "Maintenance request submitted successfully", 
+      data: newRequest 
+    });
   } catch (error) {
     console.error("Error in createRequest:", error);
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
 
-// Get Tenant's Maintenance Requests (Token Required)
+// Get Tenant's Maintenance Requests (Tenant or Admin)
 exports.getTenantRequests = async (req, res) => {
   try {
-    const tenantId = req.user.tid; // Fetch tid from token
+    const tenantId = req.user.tid;
+    // Allow both tenants and admins
+    if (req.user.role !== "tenant" && req.user.role !== "admin" && req.user.role !== "superadmin") {
+      return res.status(403).json({ message: "Unauthorized: Tenant or Admin access only" });
+    }
+
+    if (!tenantId && req.user.role === "tenant") {
+      return res.status(401).json({ message: "Tenant ID is required" });
+    }
+
     const requests = await Maintenance.find({ tid: tenantId });
     res.status(200).json(requests);
   } catch (error) {
@@ -75,15 +76,15 @@ exports.getTenantRequests = async (req, res) => {
   }
 };
 
-// Update Maintenance Status (Admin Token Required)
+// Update Maintenance Status (Admin Only)
 exports.updateStatus = async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Unauthorized" });
-    }
-
     const { requestId } = req.params;
     const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ message: "Status is required" });
+    }
 
     const updatedRequest = await Maintenance.findByIdAndUpdate(
       requestId,
@@ -91,9 +92,14 @@ exports.updateStatus = async (req, res) => {
       { new: true }
     );
 
-    if (!updatedRequest) return res.status(404).json({ message: "Request not found" });
+    if (!updatedRequest) {
+      return res.status(404).json({ message: "Request not found" });
+    }
 
-    res.status(200).json({ message: "Status updated", data: updatedRequest });
+    res.status(200).json({ 
+      message: "Status updated successfully", 
+      data: updatedRequest 
+    });
   } catch (error) {
     console.error("Error in updateStatus:", error);
     res.status(500).json({ message: "Server error: " + error.message });
@@ -103,6 +109,11 @@ exports.updateStatus = async (req, res) => {
 // Update Feedback (Tenant Only)
 exports.updateFeedback = async (req, res) => {
   try {
+    // Validate tenant role
+    if (req.user.role !== "tenant") {
+      return res.status(403).json({ message: "Unauthorized: Tenant access only" });
+    }
+
     const { id } = req.params;
     const { remarks, rating } = req.body;
 
@@ -116,42 +127,70 @@ exports.updateFeedback = async (req, res) => {
       return res.status(400).json({ message: "Remarks and rating are required" });
     }
 
-    console.log("Updating feedback for ID:", id);
-    console.log("New remarks:", remarks);
-    console.log("New rating:", rating);
+    // Ensure tenant owns the request
+    const request = await Maintenance.findById(id);
+    if (!request || request.tid !== req.user.tid) {
+      return res.status(403).json({ message: "Unauthorized: You can only update your own requests" });
+    }
 
-    // Update the maintenance request
     const updatedRequest = await Maintenance.findByIdAndUpdate(
       id,
       { remarks, rating },
-      { new: true } // Return the updated document
+      { new: true }
     );
-
-    console.log("Updated document:", updatedRequest);
 
     if (!updatedRequest) {
       return res.status(404).json({ message: "Maintenance request not found" });
     }
 
-    res.json({ message: "Feedback updated successfully", data: updatedRequest });
+    res.json({ 
+      message: "Feedback updated successfully", 
+      data: updatedRequest 
+    });
   } catch (error) {
     console.error("Error updating feedback:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
 
 // Get Requests by pgId (Admin Only)
 exports.getRequestsByPgId = async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Unauthorized" });
-    }
-
     const { pgId } = req.params;
     const requests = await Maintenance.find({ pgId });
     res.status(200).json(requests);
   } catch (error) {
     console.error("Error in getRequestsByPgId:", error);
+    res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+// Get Latest Maintenance Requests (Admin Only)
+exports.getLatestRequests = async (req, res) => {
+  try {
+    console.log("Fetching latest requests...");
+    const requests = await Maintenance.find()
+      .sort({ createdAt: -1 }) // Sort by most recent first
+      .limit(10) // Limit to 10 latest requests
+      .lean();
+
+    console.log("Fetched requests:", requests);
+
+    // Fetch PG names
+    const pgIds = [...new Set(requests.map((req) => req.pgId))];
+    console.log("Unique pgIds:", pgIds);
+    const pgs = await PG.find({ pgId: { $in: pgIds } }).select("pgId name").lean();
+    console.log("Fetched PGs:", pgs);
+
+    // Map PG names to requests
+    const pgMap = new Map(pgs.map((pg) => [pg.pgId, pg.name]));
+    const enrichedRequests = requests.map((req) => ({
+      ...req,
+      pgName: pgMap.get(req.pgId) || "Unknown",
+    }));
+
+    res.status(200).json(enrichedRequests);
+  } catch (error) {
+    console.error("Error in getLatestRequests:", error.stack);
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
