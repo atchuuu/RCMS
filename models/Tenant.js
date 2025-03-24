@@ -22,9 +22,9 @@ const TenantSchema = new mongoose.Schema({
   idCardUploaded: { type: Boolean, default: false },
 
   // ✅ New fields for storing documents
-  aadharCardPath: { type: String, default: null },
+  aadharFrontPath: { type: String, default: null },
+  aadharBackPath: { type: String, default: null },
   idCardPath: { type: String, default: null },
-
   // ✅ Transactions Array
   transactions: [
     {

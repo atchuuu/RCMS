@@ -31,7 +31,7 @@ const verifyToken = async (req, res, next, options = { requiredRole: null }) => 
         email: admin.email,
         role: admin.role,
       };
-      console.log("req.user:", req.user); // Debug
+      console.log("req.user (admin):", req.user); // Debug
 
       if (options.requiredRole) {
         const requiredRoles = Array.isArray(options.requiredRole)
@@ -39,19 +39,23 @@ const verifyToken = async (req, res, next, options = { requiredRole: null }) => 
           : [options.requiredRole];
         console.log("Required Roles:", requiredRoles); // Debug
         if (!requiredRoles.includes(req.user.role)) {
-          return res.status(403).json({ message: "Access denied: admin,superadmin role required" });
+          return res.status(403).json({ message: "Access denied: admin or superadmin role required" });
         }
       }
     } else {
-      const tenant = await Tenant.findById(decoded.id);
+      // For tenants, use `tenantId` from the token (which maps to `tid`)
+      const tenant = await Tenant.findOne({ tid: decoded.tenantId });
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found." });
       }
       req.user = {
-        id: tenant._id.toString(),
+        tid: tenant.tid, // Use tid instead of _id
+        email: tenant.email,
+        tname: tenant.tname, // Include tname for uploadDocuments
         role: "tenant",
-        // Add other tenant fields as needed
       };
+      console.log("req.user (tenant):", req.user); // Debug
+
       if (options.requiredRole) {
         return res.status(403).json({ message: "Access denied: Admin role required" });
       }

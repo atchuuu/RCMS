@@ -26,12 +26,17 @@ router.get("/dashboard", verifyToken, getTenantDashboard);
 router.get("/me", verifyToken, getTenantProfile);
 router.get("/:tid/transactions", verifyToken, getTenantTransactions);
 router.post("/:tid/transactions", verifyToken, uploadMiddleware, addTransaction);
-router.post(
-  "/upload",
-  verifyToken,
-  uploadId.fields([{ name: "aadharCard" }, { name: "idCard" }]),
-  uploadDocuments
-);
+  router.post(
+    "/upload",
+    verifyToken,
+    uploadId.fields([
+      { name: "aadharFront" },
+      { name: "aadharBack" },
+      { name: "idCard" }
+    ]),
+    uploadDocuments
+  );
+
 router.post("/delete-documents", verifyToken, deleteDocumentsByPgName);
 
 module.exports = router;

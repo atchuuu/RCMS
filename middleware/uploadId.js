@@ -5,8 +5,14 @@ const fs = require("fs-extra");
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     try {
-      const folder = file.fieldname === "aadharCard" ? "aadhar card" : "idcard";
-      const uploadPath = path.join(__dirname, `../documents/${folder}/temp`); // Temporary folder
+      let uploadPath;
+      if (file.fieldname === "aadharFront") {
+        uploadPath = path.join(__dirname, `../documents/aadhar/${req.body.pgName}/front/temp`);
+      } else if (file.fieldname === "aadharBack") {
+        uploadPath = path.join(__dirname, `../documents/aadhar/${req.body.pgName}/back/temp`);
+      } else if (file.fieldname === "idCard") {
+        uploadPath = path.join(__dirname, `../documents/idcard/${req.body.pgName}/temp`);
+      }
       await fs.ensureDir(uploadPath);
       cb(null, uploadPath);
     } catch (err) {
