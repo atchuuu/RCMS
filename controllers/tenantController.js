@@ -153,7 +153,8 @@ const tenantLogin = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { tenantId: tenant.tid, email: tenant.email, role: "tenant" }, // Added role for consistency
+      { tenantId: tenant.tid, email: tenant.email, role: "tenant" ,pgName: tenant.pgName, // Add pgName
+        roomNo: tenant.roomNo,}, // Added role for consistency
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -280,36 +281,63 @@ const addTransaction = async (req, res) => {
     }
 
     const { utrNumber, amount, date, nextDueDate } = req.body;
+
+    // Fetch the actual tenant document from the database
     const tenant = await Tenant.findOne({ tid: req.user.tid });
     if (!tenant) {
       return res.status(404).json({ message: "Tenant not found" });
     }
+    if (!tenant.pgName || !tenant.roomNo) {
+      return res.status(400).json({ message: "Tenant pgName or roomNo missing" });
+    }
 
-    const screenshotPath = path.join(
-      "uploads",
-      "payment_screenshots",
-      tenant.pgName,
-      tenant.roomNo,
-      `${new Date().toLocaleString("default", { month: "long" }).toLowerCase()}.jpg`
-    );
+    // Define the base path for payment screenshots
+    const baseScreenshotPath = path.join(__dirname, "../uploads/payment_screenshots");
+    const screenshotFolder = path.join(baseScreenshotPath, tenant.pgName, tenant.roomNo);
+
+    // Get the file extension from the uploaded file
+    const fileExt = path.extname(req.file.originalname);
+
+    // Use the month from the payment date or current month as filename
+    const paymentDate = date ? new Date(date) : new Date();
+    const month = paymentDate.toLocaleString("default", { month: "long" }).toLowerCase();
+    const screenshotFileName = `${month}${fileExt}`; // e.g., march.jpg
+
+    // Define the final destination path
+    const screenshotPath = path.join(screenshotFolder, screenshotFileName);
+
+    // Ensure the directory exists and move the file from temp to final location
+    await fsExtra.ensureDir(screenshotFolder);
+    await fsExtra.move(req.file.path, screenshotPath, { overwrite: true });
+
+    // Save the relative path to the database
+    const relativeScreenshotPath = path.join("uploads", "payment_screenshots", tenant.pgName, tenant.roomNo, screenshotFileName);
 
     const transaction = new Transaction({
       tid: req.user.tid,
       amount,
       utrNumber,
-      screenshotPath,
+      screenshotPath: relativeScreenshotPath,
       paymentDate: date,
       nextDueDate,
     });
 
     await transaction.save();
 
+    // Ensure transactions array exists
+    if (!tenant.transactions) {
+      tenant.transactions = [];
+    }
+
+    // Push the new transaction to the tenant's transactions array
     tenant.transactions.push({
       amount: parseFloat(amount),
       date: new Date(date),
       utrNumber,
     });
     tenant.dueDate = new Date(nextDueDate);
+
+    // Save the updated tenant document
     await tenant.save();
 
     res.status(201).json({ transaction });
@@ -319,8 +347,7 @@ const addTransaction = async (req, res) => {
   }
 };
 
-
-
+// Export remains unchanged
 module.exports = {
   tenantLogin,
   addTenant,
@@ -333,5 +360,4 @@ module.exports = {
   uploadDocuments,
   addTransaction,
   getTransactions,
-  
 };

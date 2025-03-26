@@ -54,6 +54,8 @@ const verifyToken = async (req, res, next, options = { requiredRole: null }) => 
         pgId: tenant.pgId,
         tname: tenant.tname, // Include tname for uploadDocuments
         role: "tenant",
+        pgName: tenant.pgName, // Add pgName
+        roomNo: tenant.roomNo,
       };
       console.log("req.user (tenant):", req.user); // Debug
 

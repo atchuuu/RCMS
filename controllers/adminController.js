@@ -434,6 +434,25 @@ const denyTenantVerification = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
+const getTenantsByPgId = async (req, res) => {
+  try {
+    const { pgId } = req.params;
+    console.log("Fetching tenants for pgId:", pgId);
+
+    const tenants = await Tenant.find({ pgId }).select(
+      "tid tname email mobileNumber pgName roomNo isVerified aadharFrontPath aadharBackPath idCardPath"
+    );
+    if (!tenants || tenants.length === 0) {
+      return res.status(404).json({ success: false, message: "No tenants found for this PG" });
+    }
+
+    res.status(200).json({ success: true, tenants });
+  } catch (error) {
+    console.error("Error fetching tenants by pgId:", error.message);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
 module.exports = {
   getAdminProfile,
   verifyTenant,
@@ -447,4 +466,5 @@ module.exports = {
   getTenantDocuments,
   deleteDocumentsByPgName,
   denyTenantVerification,
+  getTenantsByPgId, // Add this
 };

@@ -1,24 +1,15 @@
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    console.log("Inside upload middleware, req.tenant:", req.tenant); // Debug
-    const { pgName, roomNo } = req.tenant || {};
-    if (!pgName || !roomNo) {
-      console.error("Missing pgName or roomNo in req.tenant:", req.tenant);
-      return cb(new Error("Tenant pgName or roomNo missing"));
-    }
-    const month = new Date().toLocaleString("default", { month: "long" }).toLowerCase();
-    const uploadPath = path.join(__dirname, "../uploads/payment_screenshots", pgName, roomNo);
-
-    fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
+    const tempPath = path.join(__dirname, "../uploads/temp");
+    cb(null, tempPath); // Save to a temporary directory
   },
   filename: (req, file, cb) => {
     const month = new Date().toLocaleString("default", { month: "long" }).toLowerCase();
-    cb(null, `${month}.jpg`);
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`; // Ensure uniqueness
+    cb(null, `${month}-${uniqueSuffix}${path.extname(file.originalname)}`); // e.g., march-1698765432112-123456789.jpg
   },
 });
 
