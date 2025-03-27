@@ -1,24 +1,25 @@
 const mongoose = require("mongoose");
 
 const MaintenanceSchema = new mongoose.Schema({
-  tid: { 
-    type: Number, 
-    required: true, 
-    index: true // Added index for faster queries by tenant ID
+  tid: {
+    type: Number,
+    required: true,
+    index: true, // Index for faster queries by tenant ID
   },
-  pgId: { 
-    type: String, 
-    required: true, 
-    index: true // Replaces pgName, matches your pgId convention (e.g., "PG001")
+  pgId: {
+    type: String,
+    required: true,
+    index: true, // Index for faster queries by pgId
   },
-  roomNo: { 
-    type: String, 
-    required: true 
+  roomNo: {
+    type: String,
+    required: true,
   },
-  mobileNumber: { 
-    type: String, 
-    required: true, 
-    match: [/^\d{10}$/, "Please enter a valid 10-digit mobile number"] // Validation for 10-digit phone
+  mobileNumber: {
+    type: String,
+    default: null,
+    unique: true,
+    match: [/^\+\d{10,15}$/, "Please enter a valid mobile number with country code (e.g., +919876543210)"],
   },
   category: {
     type: String,
@@ -41,55 +42,55 @@ const MaintenanceSchema = new mongoose.Schema({
       "Water Cooler/Drinking Water (Electrical Issue)",
       "Water Cooler/Drinking Water (Plumbing Issue)",
       "Water Purifier / RO System",
-      "Welding"
-    ]
+      "Welding",
+    ],
   },
-  description: { 
-    type: String, 
-    required: true, 
-    trim: true // Remove leading/trailing whitespace
+  description: {
+    type: String,
+    required: true,
+    trim: true, // Remove leading/trailing whitespace
   },
   status: {
     type: String,
     enum: ["Pending", "In Progress", "Completed", "Rejected"],
-    default: "Pending"
+    default: "Pending",
   },
-  availableDate: { 
-    type: Date, 
-    required: true 
+  availableDate: {
+    type: Date,
+    required: true,
   },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
+  createdAt: {
+    type: Date,
+    default: Date.now,
   },
-  updatedAt: { 
-    type: Date, 
-    default: Date.now // Added to track last update
+  updatedAt: {
+    type: Date,
+    default: Date.now, // Track last update
   },
-  remarks: { 
-    type: String, 
-    default: null, 
-    trim: true 
+  remarks: {
+    type: String,
+    default: null,
+    trim: true, // Remove leading/trailing whitespace
   },
-  rating: { 
-    type: Number, 
-    default: null, // Changed to null as default since not all requests will have ratings initially
-    min: 1, 
-    max: 5 
+  rating: {
+    type: Number,
+    default: null, // Null as default since not all requests will have ratings initially
+    min: [1, "Rating must be at least 1"],
+    max: [5, "Rating must not exceed 5"],
   },
-  assignedTo: { 
-    type: String, 
-    default: null // Optional: Track who’s assigned to handle the request (e.g., worker name/ID)
-  }
+  assignedTo: {
+    type: String,
+    default: null, // Optional field for tracking assigned worker
+  },
 });
 
-// Update `updatedAt` before saving
+// Pre-save middleware to update `updatedAt`
 MaintenanceSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
   next();
 });
 
-// Update `updatedAt` before updates
+// Pre-update middleware to update `updatedAt`
 MaintenanceSchema.pre("findOneAndUpdate", function (next) {
   this.set({ updatedAt: Date.now() });
   next();

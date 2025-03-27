@@ -7,19 +7,16 @@ exports.createRequest = async (req, res) => {
     const { category, description, availableDate } = req.body;
     const { tid, pgId, roomNo, mobileNumber } = req.user;
 
-    // Validate tenant role
     if (req.user.role !== "tenant") {
       return res.status(403).json({ message: "Unauthorized: Tenant access only" });
     }
 
-    // Validate required fields from token
     if (!tid || !pgId) {
       return res.status(401).json({
         message: "Invalid token: Tenant ID (tid) and PG ID (pgId) are required",
       });
     }
 
-    // Fetch tenant data if roomNo or mobileNumber missing
     const tenant = await Tenant.findOne({ tid });
     if (!tenant) {
       return res.status(404).json({ message: "Tenant not found in database" });
@@ -28,9 +25,18 @@ exports.createRequest = async (req, res) => {
     const finalRoomNo = roomNo || tenant.roomNo;
     const finalMobileNumber = mobileNumber || tenant.mobileNumber;
 
+    console.log("Final mobileNumber:", finalMobileNumber); // Debug log
+
     if (!finalRoomNo || !finalMobileNumber) {
       return res.status(400).json({
         message: "Room number and mobile number are required",
+      });
+    }
+
+    // Optional: Add explicit validation if needed, but schema should handle it
+    if (!/^\+\d{10,15}$/.test(finalMobileNumber)) {
+      return res.status(400).json({
+        message: "Mobile number must include country code and be 10-15 digits",
       });
     }
 
@@ -54,7 +60,6 @@ exports.createRequest = async (req, res) => {
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
-
 // Get Tenant's Maintenance Requests (Tenant or Admin)
 exports.getTenantRequests = async (req, res) => {
   try {
