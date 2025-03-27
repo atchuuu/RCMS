@@ -40,9 +40,11 @@ app.use(
       "https://localhost:3001",
       "https://192.168.1.103:3000",
       "https://192.168.1.103:3001",
-      "http://localhost:3000", // Add for local HTTP frontend
-      "*", // Allow all for testing (restrict later)
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "https://127.0.0.1:3000",
       "https://eec0-49-156-108-65.ngrok-free.app",
+      "*",
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
