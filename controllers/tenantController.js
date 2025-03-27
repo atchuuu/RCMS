@@ -3,18 +3,34 @@ const Transaction = require("../models/Transaction");
 const Invoice = require("../models/Invoice");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { access } = require("fs").promises;
 const path = require("path");
 const fs = require("fs");
 const fsExtra = require("fs-extra");
-const uploadMiddleware = require("../middleware/uploadPayement");
+const admin = require("firebase-admin"); // Add Firebase Admin SDK
+require("dotenv").config();
+
+// Initialize Firebase Admin SDK
+const serviceAccount = require("../serviceAccountKey.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const addTenant = async (req, res) => {
   try {
-    let { tname, mobileNumber, email, password } = req.body;
+    let { tname, mobileNumber, email, password, idToken } = req.body;
 
-    if (!mobileNumber) {
-      return res.status(400).json({ message: "Mobile number is required!" });
+    if (!mobileNumber || !idToken) {
+      return res.status(400).json({ message: "Mobile number and ID token are required!" });
+    }
+
+    if (!/^\+\d{10,15}$/.test(mobileNumber)) {
+      return res.status(400).json({ message: "Invalid mobile number format. Use country code (e.g., +91) followed by 10-15 digits." });
+    }
+
+    // Verify Firebase ID token
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    if (decodedToken.phone_number !== mobileNumber) {
+      return res.status(400).json({ message: "Phone number does not match verified token" });
     }
 
     const existingTenant = await Tenant.findOne({ $or: [{ email }, { mobileNumber }] });
@@ -22,12 +38,15 @@ const addTenant = async (req, res) => {
       return res.status(400).json({ message: "Tenant already exists with this email or mobile number" });
     }
 
-    const lastTenant = await Tenant.findOne().sort({ tid: -1 });
-    const tid = lastTenant ? lastTenant.tid + 1 : 1;
-
+    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Assign a new tenant ID
+    const lastTenant = await Tenant.findOne().sort({ tid: -1 });
+    const tid = lastTenant ? lastTenant.tid + 1 : 1;
+
+    // Create and save the new tenant
     const newTenant = new Tenant({
       tid,
       tname,
@@ -37,12 +56,15 @@ const addTenant = async (req, res) => {
     });
 
     await newTenant.save();
+
     res.status(201).json({ message: "Tenant registered successfully!", tenant: newTenant });
   } catch (error) {
-    console.error("Error registering tenant:", error);
-    res.status(500).json({ message: "Server error", error });
+    console.error("Error in addTenant:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+// Remove verifyTenant since it's handled by Firebase in the frontend
 
 const getAllTenants = async (req, res) => {
   try {
@@ -153,8 +175,7 @@ const tenantLogin = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { tenantId: tenant.tid, email: tenant.email, role: "tenant" ,pgName: tenant.pgName, // Add pgName
-        roomNo: tenant.roomNo,}, // Added role for consistency
+      { tenantId: tenant.tid, email: tenant.email, role: "tenant", pgName: tenant.pgName, roomNo: tenant.roomNo },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -198,39 +219,22 @@ const uploadDocuments = async (req, res) => {
     const aadharBackFolder = path.join(baseDocPath, "aadhar", pgName, "back");
     const idCardFolder = path.join(baseDocPath, "idcard", pgName);
 
-    // Get individual file extensions
     const fileExtAadharFront = path.extname(req.files["aadharFront"][0].originalname);
     const fileExtAadharBack = path.extname(req.files["aadharBack"][0].originalname);
     const fileExtId = path.extname(req.files["idCard"][0].originalname);
 
-    // Create unique filenames for each file with their respective extensions
     const aadharFrontFileName = `${tname}+${roomNo}${fileExtAadharFront}`;
     const aadharBackFileName = `${tname}+${roomNo}${fileExtAadharBack}`;
     const idCardFileName = `${tname}+${roomNo}${fileExtId}`;
 
-    // Move Aadhaar Front
     await fsExtra.ensureDir(aadharFrontFolder);
-    await fsExtra.move(
-      req.files["aadharFront"][0].path,
-      path.join(aadharFrontFolder, aadharFrontFileName),
-      { overwrite: true }
-    );
+    await fsExtra.move(req.files["aadharFront"][0].path, path.join(aadharFrontFolder, aadharFrontFileName), { overwrite: true });
 
-    // Move Aadhaar Back
     await fsExtra.ensureDir(aadharBackFolder);
-    await fsExtra.move(
-      req.files["aadharBack"][0].path,
-      path.join(aadharBackFolder, aadharBackFileName),
-      { overwrite: true }
-    );
+    await fsExtra.move(req.files["aadharBack"][0].path, path.join(aadharBackFolder, aadharBackFileName), { overwrite: true });
 
-    // Move ID Card
     await fsExtra.ensureDir(idCardFolder);
-    await fsExtra.move(
-      req.files["idCard"][0].path,
-      path.join(idCardFolder, idCardFileName),
-      { overwrite: true }
-    );
+    await fsExtra.move(req.files["idCard"][0].path, path.join(idCardFolder, idCardFileName), { overwrite: true });
 
     const updateData = {
       documentsUploaded: true,
@@ -254,6 +258,7 @@ const uploadDocuments = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
+
 const getTransactions = async (req, res) => {
   try {
     const { tid } = req.params;
@@ -282,7 +287,6 @@ const addTransaction = async (req, res) => {
 
     const { utrNumber, amount, date, nextDueDate } = req.body;
 
-    // Fetch the actual tenant document from the database
     const tenant = await Tenant.findOne({ tid: req.user.tid });
     if (!tenant) {
       return res.status(404).json({ message: "Tenant not found" });
@@ -291,26 +295,18 @@ const addTransaction = async (req, res) => {
       return res.status(400).json({ message: "Tenant pgName or roomNo missing" });
     }
 
-    // Define the base path for payment screenshots
     const baseScreenshotPath = path.join(__dirname, "../uploads/payment_screenshots");
     const screenshotFolder = path.join(baseScreenshotPath, tenant.pgName, tenant.roomNo);
 
-    // Get the file extension from the uploaded file
     const fileExt = path.extname(req.file.originalname);
-
-    // Use the month from the payment date or current month as filename
     const paymentDate = date ? new Date(date) : new Date();
     const month = paymentDate.toLocaleString("default", { month: "long" }).toLowerCase();
-    const screenshotFileName = `${month}${fileExt}`; // e.g., march.jpg
-
-    // Define the final destination path
+    const screenshotFileName = `${month}${fileExt}`;
     const screenshotPath = path.join(screenshotFolder, screenshotFileName);
 
-    // Ensure the directory exists and move the file from temp to final location
     await fsExtra.ensureDir(screenshotFolder);
     await fsExtra.move(req.file.path, screenshotPath, { overwrite: true });
 
-    // Save the relative path to the database
     const relativeScreenshotPath = path.join("uploads", "payment_screenshots", tenant.pgName, tenant.roomNo, screenshotFileName);
 
     const transaction = new Transaction({
@@ -324,20 +320,16 @@ const addTransaction = async (req, res) => {
 
     await transaction.save();
 
-    // Ensure transactions array exists
     if (!tenant.transactions) {
       tenant.transactions = [];
     }
 
-    // Push the new transaction to the tenant's transactions array
     tenant.transactions.push({
       amount: parseFloat(amount),
       date: new Date(date),
       utrNumber,
     });
     tenant.dueDate = new Date(nextDueDate);
-
-    // Save the updated tenant document
     await tenant.save();
 
     res.status(201).json({ transaction });
@@ -347,7 +339,6 @@ const addTransaction = async (req, res) => {
   }
 };
 
-// Export remains unchanged
 module.exports = {
   tenantLogin,
   addTenant,

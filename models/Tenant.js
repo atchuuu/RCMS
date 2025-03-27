@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const TenantSchema = new mongoose.Schema({
   tid: { type: Number, unique: true },
   tname: { type: String },
-  mobileNumber: { type: String, default: null, unique: true },
+  mobileNumber: { type: String, default: null, unique: true,match: /^\+\d{10,15}$/ },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   pgId: {type: String},
