@@ -1,70 +1,82 @@
 const Tenant = require("../models/Tenant");
 const Transaction = require("../models/Transaction");
 const Invoice = require("../models/Invoice");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs"); // Use bcryptjs instead of bcrypt for consistency
 const jwt = require("jsonwebtoken");
 const path = require("path");
 const fs = require("fs");
 const fsExtra = require("fs-extra");
-const admin = require("firebase-admin"); // Add Firebase Admin SDK
+const admin = require("firebase-admin"); // Firebase Admin SDK
 require("dotenv").config();
 
 // Initialize Firebase Admin SDK
-const serviceAccount = require("../serviceAccountKey.json");
+const serviceAccount = require("../serviceAccountKey.json"); // Adjust the path to your service account key file
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
 const addTenant = async (req, res) => {
   try {
-    let { tname, mobileNumber, email, password, idToken } = req.body;
+    const { tname, email, mobileNumber, password, idToken } = req.body;
 
-    if (!mobileNumber || !idToken) {
-      return res.status(400).json({ message: "Mobile number and ID token are required!" });
+    // Validate required fields
+    if (!tname || !email || !mobileNumber || !password || !idToken) {
+      return res.status(400).json({ message: "All fields are required: tname, email, mobileNumber, password, idToken" });
     }
 
-    if (!/^\+\d{10,15}$/.test(mobileNumber)) {
-      return res.status(400).json({ message: "Invalid mobile number format. Use country code (e.g., +91) followed by 10-15 digits." });
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
     }
 
-    // Verify Firebase ID token
+    // Validate mobile number format (e.g., +919876543210)
+    const mobileRegex = /^\+\d{10,15}$/;
+    if (!mobileRegex.test(mobileNumber)) {
+      return res.status(400).json({ message: "Invalid mobile number format. Must include country code (e.g., +919876543210)" });
+    }
+
+    // Verify the Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const uid = decodedToken.uid;
+
+    // Check if the mobile number matches the one in the token
     if (decodedToken.phone_number !== mobileNumber) {
-      return res.status(400).json({ message: "Phone number does not match verified token" });
+      return res.status(400).json({ message: "Mobile number does not match authenticated user" });
     }
 
-    const existingTenant = await Tenant.findOne({ $or: [{ email }, { mobileNumber }] });
-    if (existingTenant) {
-      return res.status(400).json({ message: "Tenant already exists with this email or mobile number" });
-    }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Assign a new tenant ID
-    const lastTenant = await Tenant.findOne().sort({ tid: -1 });
-    const tid = lastTenant ? lastTenant.tid + 1 : 1;
-
-    // Create and save the new tenant
-    const newTenant = new Tenant({
-      tid,
-      tname,
-      mobileNumber,
-      email,
-      password: hashedPassword,
+    // Check if tenant already exists
+    const existingTenant = await Tenant.findOne({
+      $or: [{ email }, { mobileNumber }],
     });
+    if (existingTenant) {
+      return res.status(400).json({ message: "Tenant with this email or mobile number already exists" });
+    }
 
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Generate a unique tid (e.g., increment based on the last tenant)
+    const lastTenant = await Tenant.findOne().sort({ tid: -1 });
+    const newTid = lastTenant ? lastTenant.tid + 1 : 1000;
+
+    // Save the tenant to the database
+    const newTenant = new Tenant({
+      tid: newTid,
+      tname,
+      email,
+      mobileNumber,
+      password: hashedPassword,
+      firebaseUid: uid,
+    });
     await newTenant.save();
 
-    res.status(201).json({ message: "Tenant registered successfully!", tenant: newTenant });
+    res.status(201).json({ message: "Tenant created successfully", tid: newTid });
   } catch (error) {
-    console.error("Error in addTenant:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("Error adding tenant:", error);
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
-
-// Remove verifyTenant since it's handled by Firebase in the frontend
 
 const getAllTenants = async (req, res) => {
   try {
@@ -155,8 +167,8 @@ const tenantLogin = async (req, res) => {
   try {
     const { email, mobileNumber, password } = req.body;
 
-    if (!email && !mobileNumber) {
-      return res.status(400).json({ message: "Email or mobile number is required" });
+    if (!password || (!email && !mobileNumber)) {
+      return res.status(400).json({ message: "Email or mobile number and password are required" });
     }
 
     const tenant = await Tenant.findOne({

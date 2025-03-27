@@ -12,6 +12,7 @@ const TenantSchema = new mongoose.Schema({
   roomNo: { type: String },
   rent: { type: Number },
   securityAmount: { type: Number },
+  firebaseUid: { type: String, required: true, unique: true },
   isVerified:{type: Boolean, required:true,default: false},
   maintenanceAmount: { type: Number, default: 500 },
   electricityPastMonth: { type: Number, default: 0 },
