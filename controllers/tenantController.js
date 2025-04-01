@@ -1,16 +1,16 @@
 const Tenant = require("../models/Tenant");
 const Transaction = require("../models/Transaction");
 const Invoice = require("../models/Invoice");
-const bcrypt = require("bcryptjs"); // Use bcryptjs instead of bcrypt for consistency
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const path = require("path");
 const fs = require("fs");
 const fsExtra = require("fs-extra");
-const admin = require("firebase-admin"); // Firebase Admin SDK
+const admin = require("firebase-admin");
 require("dotenv").config();
 
 // Initialize Firebase Admin SDK
-const serviceAccount = require("../serviceAccountKey.json"); // Adjust the path to your service account key file
+const serviceAccount = require("../serviceAccountKey.json");
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -19,33 +19,27 @@ const addTenant = async (req, res) => {
   try {
     const { tname, email, mobileNumber, password, idToken } = req.body;
 
-    // Validate required fields
     if (!tname || !email || !mobileNumber || !password || !idToken) {
       return res.status(400).json({ message: "All fields are required: tname, email, mobileNumber, password, idToken" });
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: "Invalid email format" });
     }
 
-    // Validate mobile number format (e.g., +919876543210)
     const mobileRegex = /^\+\d{10,15}$/;
     if (!mobileRegex.test(mobileNumber)) {
       return res.status(400).json({ message: "Invalid mobile number format. Must include country code (e.g., +919876543210)" });
     }
 
-    // Verify the Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
     const uid = decodedToken.uid;
 
-    // Check if the mobile number matches the one in the token
     if (decodedToken.phone_number !== mobileNumber) {
       return res.status(400).json({ message: "Mobile number does not match authenticated user" });
     }
 
-    // Check if tenant already exists
     const existingTenant = await Tenant.findOne({
       $or: [{ email }, { mobileNumber }],
     });
@@ -53,14 +47,11 @@ const addTenant = async (req, res) => {
       return res.status(400).json({ message: "Tenant with this email or mobile number already exists" });
     }
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Generate a unique tid (e.g., increment based on the last tenant)
     const lastTenant = await Tenant.findOne().sort({ tid: -1 });
     const newTid = lastTenant ? lastTenant.tid + 1 : 1000;
 
-    // Save the tenant to the database
     const newTenant = new Tenant({
       tid: newTid,
       tname,
@@ -146,7 +137,7 @@ const getTenantDashboard = async (req, res) => {
       idProofs: tenant.idCardUploaded,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
 
@@ -210,6 +201,52 @@ const tenantLogin = async (req, res) => {
   } catch (error) {
     console.error("❌ Login error:", error);
     res.status(500).json({ message: "Server error", error });
+  }
+};
+
+const checkMobile = async (req, res) => {
+  try {
+    const { mobileNumber } = req.body;
+
+    if (!mobileNumber) {
+      return res.status(400).json({ message: "Mobile number is required" });
+    }
+
+    const tenant = await Tenant.findOne({ mobileNumber });
+    if (!tenant) {
+      return res.status(404).json({ message: "No tenant found with this mobile number" });
+    }
+
+    res.status(200).json({ message: "Mobile number found" });
+  } catch (error) {
+    console.error("Error checking mobile number:", error);
+    res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    const { mobileNumber, newPassword } = req.body;
+
+    if (!mobileNumber || !newPassword) {
+      return res.status(400).json({ message: "Mobile number and new password are required" });
+    }
+
+    const tenant = await Tenant.findOne({ mobileNumber });
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await Tenant.updateOne(
+      { mobileNumber },
+      { $set: { password: hashedPassword } }
+    );
+
+    res.status(200).json({ message: "Password reset successfully" });
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    res.status(500).json({ message: "Server error: " + error.message });
   }
 };
 
@@ -351,6 +388,39 @@ const addTransaction = async (req, res) => {
   }
 };
 
+const changePassword = async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "Old password and new password are required" });
+    }
+
+    const tenant = await Tenant.findOne({ tid: req.user.tid });
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, tenant.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect old password" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "New password must be at least 6 characters long" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    tenant.password = hashedPassword;
+    await tenant.save();
+
+    res.status(200).json({ message: "Password changed successfully" });
+  } catch (error) {
+    console.error("Error changing password:", error);
+    res.status(500).json({ message: "Server error: " + error.message });
+  }
+};
+
 module.exports = {
   tenantLogin,
   addTenant,
@@ -363,4 +433,7 @@ module.exports = {
   uploadDocuments,
   addTransaction,
   getTransactions,
+  checkMobile,
+  resetPassword,
+  changePassword, // Add the new endpoint
 };

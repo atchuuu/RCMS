@@ -5,6 +5,7 @@ const cors = require("cors");
 const path = require("path");
 const https = require("https");
 const fs = require("fs");
+const os = require("os"); // Add this to get network interfaces
 
 // Import Routes
 const tenantRoutes = require("./routes/tenantRoutes");
@@ -32,27 +33,45 @@ const sslOptions = {
   cert: fs.readFileSync(path.join(__dirname, "certs", "cert.pem")),
 };
 
+// Function to get the server's IP address dynamically
+function getServerIp() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Skip internal (e.g., 127.0.0.1) and non-IPv4 addresses
+      if (iface.family === "IPv4" && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return "localhost"; // Fallback if no external IP is found
+}
+
+// Dynamic CORS origins
+const serverIp = getServerIp();
+const corsOrigins = [
+  "https://localhost:3000",
+  "https://localhost:3001",
+  `https://${serverIp}:3000`, // Dynamically add server IP for port 3000
+  `https://${serverIp}:3001`, // Dynamically add server IP for port 3001
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://127.0.0.1:3000",
+  "https://172.20.10.2:3000",
+  "https://eec0-49-156-108-65.ngrok-free.app",
+  "*",
+];
+
 // Middleware
 app.use(
   cors({
-    origin: [
-      "https://localhost:3000",
-      "https://localhost:3001",
-      "https://192.168.1.103:3000",
-      "https://192.168.1.103:3001",
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "https://127.0.0.1:3000",
-      "https://eec0-49-156-108-65.ngrok-free.app",
-      "*",
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: corsOrigins, // Use the dynamic array
+    methods: ["GET", "POST", "PUT", "DELETE"], // Fixed typo from previous code
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// Fix typo: "uplads" -> "uploads"
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/documents", express.static(path.join(__dirname, "documents")));
 
@@ -84,6 +103,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start Server on Port 5000, binding to all interfaces
-https.createServer(sslOptions, app).listen(5000, "0.0.0.0", () => {
-  console.log("✅ Server running on https://localhost:5000 and https://192.168.1.103:5000");
+const port = 5000;
+https.createServer(sslOptions, app).listen(port, "0.0.0.0", () => {
+  console.log(`✅ Server running on https://${serverIp}:${port}`);
 });
