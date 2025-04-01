@@ -10,6 +10,11 @@ const {
   getTenantProfile,
   addTransaction,
   uploadDocuments,
+  updateMobile,
+  sendVerification,
+  verifyOtp,
+  sendEmailOtp,
+  verifyEmailOtp,
 } = require("../controllers/tenantController");
 const { verifyToken } = require("../middleware/authMiddleware");
 const router = express.Router();
@@ -17,7 +22,7 @@ const uploadId = require("../middleware/uploadId");
 const uploadMiddleware = require("../middleware/uploadPayement");
 
 router.post("/login", tenantLogin);
-router.post("/add", addTenant); // Now handles final signup with idToken
+router.post("/add", addTenant);
 router.get("/", getAllTenants);
 router.put("/update/:tid", updateTenant);
 router.delete("/delete/:tid", deleteTenant);
@@ -35,5 +40,10 @@ router.post(
   ]),
   uploadDocuments
 );
+router.post("/update-mobile", verifyToken, updateMobile);
+router.post("/send-verification", verifyToken, sendVerification);
+router.post("/verify-otp", verifyToken, verifyOtp);
+router.post("/send-email-otp", verifyToken, sendEmailOtp);
+router.post("/verify-email-otp", verifyToken, verifyEmailOtp);
 
 module.exports = router;

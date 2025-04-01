@@ -11,8 +11,11 @@ const TenantSchema = new mongoose.Schema({
   roomNo: { type: String },
   rent: { type: Number },
   securityAmount: { type: Number },
-  firebaseUid: { type: String, unique: true }, // Removed required: true
+  firebaseUid: { type: String, unique: true },
   isVerified: { type: Boolean, required: true, default: false },
+  emailVerified: { type: Boolean, default: false },
+  mobileVerified: { type: Boolean, default: false },
+  emailOtp: { type: String, default: null }, // Temporary field for email OTP
   maintenanceAmount: { type: Number, default: 500 },
   electricityPastMonth: { type: Number, default: 0 },
   electricityPresentMonth: { type: Number, default: 0 },
