@@ -766,8 +766,31 @@ const verifyOtp = async (req, res) => {
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
+const resetTenantBilling = async (req, res) => {
+  try {
+    const { tid } = req.params;
+    const tenant = await Tenant.findOne({ tid });
+    if (!tenant) return res.status(404).json({ message: "Tenant not found" });
 
-// Update exports
+    tenant.rent = 0;
+    tenant.maintenanceAmount = 0;
+    tenant.mainLastMonth = 0;
+    tenant.mainCurrentMonth = 0;
+    tenant.inverterLastMonth = 0;
+    tenant.inverterCurrentMonth = 0;
+    tenant.motorUnits = 0;
+    tenant.dueElectricityBill = 0;
+    tenant.totalAmountDue = 0;
+
+    await tenant.save();
+    res.json({ message: "Tenant billing details reset successfully" });
+  } catch (error) {
+    console.error("Reset Tenant Billing Error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+
 module.exports = {
   tenantLogin,
   addTenant,
@@ -789,4 +812,6 @@ module.exports = {
   verifyOtp,
   sendEmailOtp,
   verifyEmailOtp,
+  resetTenantBilling,
+
 };

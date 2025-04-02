@@ -440,8 +440,11 @@ const getTenantsByPgId = async (req, res) => {
     console.log("Fetching tenants for pgId:", pgId);
 
     const tenants = await Tenant.find({ pgId }).select(
-      "tid tname email mobileNumber pgName roomNo isVerified aadharFrontPath aadharBackPath idCardPath"
+      "tid tname email mobileNumber pgName roomNo isVerified aadharFrontPath aadharBackPath idCardPath " +
+      "rent maintenanceAmount dueElectricityBill totalAmountDue " +
+      "mainLastMonth mainCurrentMonth inverterLastMonth inverterCurrentMonth motorUnits transactions"
     );
+
     if (!tenants || tenants.length === 0) {
       return res.status(404).json({ success: false, message: "No tenants found for this PG" });
     }
@@ -452,7 +455,31 @@ const getTenantsByPgId = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
+const rejectTransaction = async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+    const tenant = await Tenant.findOne({ "transactions._id": transactionId });
+    if (!tenant) return res.status(404).json({ message: "Transaction not found" });
 
+    tenant.transactions.id(transactionId).remove();
+    await tenant.save();
+
+    res.json({ message: "Transaction rejected and removed" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+const deleteTenant = async (req, res) => {
+  try {
+    const { tid } = req.params;
+    const tenant = await Tenant.findOneAndDelete({ tid });
+    if (!tenant) return res.status(404).json({ message: "Tenant not found" });
+    res.json({ message: "Tenant deleted successfully" });
+  } catch (error) {
+    console.error("Delete Tenant Error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 module.exports = {
   getAdminProfile,
   verifyTenant,
@@ -467,4 +494,6 @@ module.exports = {
   deleteDocumentsByPgName,
   denyTenantVerification,
   getTenantsByPgId, // Add this
+  rejectTransaction,
+  deleteTenant,
 };
