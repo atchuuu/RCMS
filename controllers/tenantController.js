@@ -540,27 +540,53 @@ const updateMobile = async (req, res) => {
   }
 };
 
+const nodemailer = require("nodemailer");
+
+// Email transport configuration
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+
 
 const updateTenant = async (req, res) => {
   try {
     const { tid } = req.params;
-    const { email, mobileNumber, ...updates } = req.body;
+    const { email, mobileNumber, pgName, pgId, ...updates } = req.body;
 
     const tenant = await Tenant.findOne({ tid });
     if (!tenant) return res.status(404).json({ message: "Tenant not found" });
 
     const emailChanged = email && email !== tenant.email;
     const mobileChanged = mobileNumber && mobileNumber !== tenant.mobileNumber;
+    const pgNameChanged = pgName && pgName !== tenant.pgName;
 
-    if (emailChanged && !tenant.emailVerified) {
-      return res.status(400).json({ message: "Email must be verified before updating" });
+    if (emailChanged) {
+      tenant.email = email;
+      tenant.emailVerified = false; // Reset to false if email changes
+      tenant.emailOtp = null; // Clear any existing OTP
     }
-    if (mobileChanged && !tenant.mobileVerified) {
-      return res.status(400).json({ message: "Mobile number must be verified before updating" });
+    if (mobileChanged) {
+      tenant.mobileNumber = mobileNumber;
+      tenant.mobileVerified = false; // Reset to false if mobile changes
     }
-
-    if (emailChanged) tenant.email = email;
-    if (mobileChanged) tenant.mobileNumber = mobileNumber;
+    if (pgNameChanged) {
+      tenant.pgName = pgName;
+      if (pgId) {
+        // If pgId is provided in the request, use it directly
+        tenant.pgId = pgId;
+      } else {
+        // Optional: Fetch pgId from PG model based on pgName as a fallback
+        const pg = await PG.findOne({ name: pgName });
+        if (!pg) return res.status(400).json({ message: "PG not found for the given name" });
+        tenant.pgId = pg.pgId;
+      }
+    }
     Object.assign(tenant, updates);
 
     await tenant.save();
@@ -581,6 +607,7 @@ const updateTenant = async (req, res) => {
         email: tenant.email,
         mobileNumber: tenant.mobileNumber,
         pgName: tenant.pgName,
+        pgId: tenant.pgId, // Include pgId in response
         roomNo: tenant.roomNo,
         documentsUploaded: tenant.documentsUploaded,
         idCardUploaded: tenant.idCardUploaded,
@@ -591,25 +618,10 @@ const updateTenant = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Tenant Error:", error);
-    res.status(500).json({ message: "Error updating tenant: " + error.message });
+    res.status(500).json({ message: "Tenant Already Exist : " + error.message });
   }
 };
-// Add these dependencies at the top if not already present
-const nodemailer = require("nodemailer");
 
-// Email transport configuration (update with your SMTP details)
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-// Generate OTP
-const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
-
-// Send Email OTP
 const sendEmailOtp = async (req, res) => {
   try {
     const { email } = req.body;
@@ -617,10 +629,9 @@ const sendEmailOtp = async (req, res) => {
 
     const tenant = await Tenant.findOne({ tid: tenantId });
     if (!tenant) return res.status(404).json({ message: "Tenant not found" });
-    if (tenant.emailVerified) return res.status(400).json({ message: "Email already verified" });
 
     const otp = generateOtp();
-    tenant.emailOtp = otp; // Assuming you add an `emailOtp` field to the Tenant schema temporarily
+    tenant.emailOtp = otp;
     await tenant.save();
 
     const mailOptions = {
@@ -638,7 +649,6 @@ const sendEmailOtp = async (req, res) => {
   }
 };
 
-// Verify Email OTP
 const verifyEmailOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -653,7 +663,7 @@ const verifyEmailOtp = async (req, res) => {
     }
 
     tenant.emailVerified = true;
-    tenant.emailOtp = null; // Clear OTP after verification
+    tenant.emailOtp = null;
     tenant.email = email;
     await tenant.save();
 
@@ -686,7 +696,6 @@ const verifyEmailOtp = async (req, res) => {
   }
 };
 
-// Adjust existing sendVerification (remove email handling)
 const sendVerification = async (req, res) => {
   try {
     const { field, value } = req.body;
@@ -698,7 +707,6 @@ const sendVerification = async (req, res) => {
 
     const tenant = await Tenant.findOne({ tid: tenantId });
     if (!tenant) return res.status(404).json({ message: "Tenant not found" });
-    if (tenant.mobileVerified) return res.status(400).json({ message: "Mobile number already verified" });
 
     res.status(200).json({ message: "Verification process initiated for mobileNumber", field, value });
   } catch (error) {
@@ -707,13 +715,12 @@ const sendVerification = async (req, res) => {
   }
 };
 
-// Existing verifyOtp (unchanged, already correct for mobile)
 const verifyOtp = async (req, res) => {
   try {
     const { field, idToken } = req.body;
     const tenantId = req.user.tid;
 
-    if (!["mobileNumber"].includes(field)) {
+    if (field !== "mobileNumber") {
       return res.status(400).json({ message: "Invalid field for this endpoint. Use /verify-email-otp for email." });
     }
 
@@ -721,19 +728,14 @@ const verifyOtp = async (req, res) => {
     if (!tenant) return res.status(404).json({ message: "Tenant not found" });
 
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    const firebaseUid = decodedToken.uid;
+    const phoneNumber = decodedToken.phone_number;
 
-    if (firebaseUid !== tenant.firebaseUid) {
-      return res.status(403).json({ message: "Unauthorized: Firebase UID mismatch" });
-    }
-
-    if (field === "mobileNumber" && decodedToken.phone_number) {
-      tenant.mobileVerified = true;
-      tenant.mobileNumber = decodedToken.phone_number;
-    } else {
+    if (!phoneNumber) {
       return res.status(400).json({ message: "Mobile number not verified in Firebase" });
     }
 
+    tenant.mobileVerified = true;
+    tenant.mobileNumber = phoneNumber;
     await tenant.save();
 
     const token = jwt.sign(
@@ -765,7 +767,7 @@ const verifyOtp = async (req, res) => {
   }
 };
 
-// Update exports to include new endpoints
+// Update exports
 module.exports = {
   tenantLogin,
   addTenant,
