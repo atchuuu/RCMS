@@ -1,78 +1,106 @@
 const PDFDocument = require("pdfkit");
-const fs = require("fs"); // Use standard fs instead of fs.promises
+const fs = require("fs");
 const path = require("path");
 
 async function generateInvoicePDF(invoice) {
   try {
     const dueDate = new Date(invoice.dueDate);
-    const monthYear = dueDate.toLocaleString("default", { month: "long", year: "numeric" }).replace(" ", "");
+    const monthYear = invoice.monthYear || new Date().toLocaleString("default", { month: "long", year: "numeric" }).replace(" ", "");
     const dirPath = path.join(__dirname, `../invoices/${monthYear}/${invoice.pgId}`);
     const fileName = `invoice_${invoice.roomNo}.pdf`;
     const filePath = path.join(dirPath, fileName);
 
-    // Ensure directory exists (using synchronous mkdir for simplicity, or use fs.promises.mkdir if async)
+    console.log("Saving invoice to:", filePath);
+
     await fs.promises.mkdir(dirPath, { recursive: true });
 
-    const doc = new PDFDocument({ margin: 50 });
-    const stream = fs.createWriteStream(filePath); // Now works with standard fs
+    const doc = new PDFDocument({ margin: 50, size: "A4" });
+    const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
-    // Header
-    doc.fontSize(25).font("Helvetica-Bold").text("INVOICE", { align: "center" }).moveDown(0.5);
+    // Header with "Logo" and Title
+    doc.rect(0, 0, 612, 100).fill("#1E3A8A"); // Blue header background
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("white")
+      .text("Rohit Cares", 50, 30)
+      .fontSize(12).text("Your Trusted PG Partner", 50, 60);
+    doc.fontSize(16).text(`Invoice #${invoice.invoiceNumber}`, 400, 40, { align: "right" });
 
-    // PG Details
-    doc.fontSize(12).font("Helvetica")
-      .text(`PG Name: ${invoice.pgName}`)
-      .text(`Room No: ${invoice.roomNo}`)
-      .text(`Tenant: ${invoice.tenantName}`)
-      .text(`Due Date: ${dueDate.toLocaleDateString()}`)
-      .moveDown(1.5);
+    // Reset fill color
+    doc.fillColor("black");
 
-    // Table Setup
-    const tableTop = doc.y;
+    // Invoice Details Section
+    doc.moveDown(2).fontSize(12).font("Helvetica-Bold")
+      .text("Invoice Details", 50, 120);
+    doc.moveTo(50, 135).lineTo(562, 135).stroke();
+
+    doc.fontSize(10).font("Helvetica")
+      .text(`PG Name: ${invoice.pgName}`, 50, 145)
+      .text(`Room No: ${invoice.roomNo}`, 50, 160)
+      .text(`Tenant: ${invoice.tenantName}`, 50, 175)
+      .text(`Generated: ${new Date().toLocaleDateString()}`, 400, 145, { align: "right" })
+      .text(`Due Date: ${dueDate.toLocaleDateString()}`, 400, 160, { align: "right" });
+
+    // Billing Table
+    const tableTop = 200;
     const itemWidth = 300;
     const amountWidth = 100;
-    const tableWidth = itemWidth + amountWidth;
+    const tableWidth = itemWidth + amountWidth + 50;
 
     doc.fontSize(12).font("Helvetica-Bold")
       .text("Description", 50, tableTop, { width: itemWidth })
-      .text("Amount (₹)", 50 + itemWidth, tableTop, { width: amountWidth, align: "right" });
+      .text("Amount (₹)", 400, tableTop, { width: amountWidth, align: "right" });
 
     doc.moveTo(50, tableTop + 15).lineTo(50 + tableWidth, tableTop + 15).stroke();
 
     // Table Content
     let yPos = tableTop + 25;
-    doc.fontSize(11).font("Helvetica");
+    doc.fontSize(10).font("Helvetica");
+
+    const mainUnits = invoice.electricityPresentMonth - invoice.electricityPastMonth;
+    const inverterUnits = invoice.inverterPresentMonth - invoice.inverterPastMonth;
 
     const items = [
       { desc: "Rent", amount: invoice.rent },
       { desc: "Maintenance", amount: invoice.maintenanceAmount },
       {
-        desc: `Electricity (${invoice.electricityPresentMonth - invoice.electricityPastMonth} units @ ₹${invoice.costPerUnit}/unit)`,
-        amount: invoice.dueElectricityBill,
+        desc: `Main Electricity (${mainUnits} units @ ₹${invoice.costPerUnit}/unit)`,
+        amount: mainUnits * invoice.costPerUnit,
+      },
+      {
+        desc: `Inverter Electricity (${inverterUnits} units @ ₹${invoice.costPerUnit}/unit)`,
+        amount: inverterUnits * invoice.costPerUnit,
+      },
+      {
+        desc: `Motor Units (${invoice.motorUnits} units @ ₹${invoice.costPerUnit}/unit)`,
+        amount: invoice.motorUnits * invoice.costPerUnit,
       },
     ];
 
-    items.forEach(({ desc, amount }) => {
-      doc.text(desc, 50, yPos, { width: itemWidth });
-      doc.text(amount.toFixed(2), 50 + itemWidth, yPos, { width: amountWidth, align: "right" });
+    items.forEach(({ desc, amount }, index) => {
+      doc.fillColor(index % 2 === 0 ? "#F3F4F6" : "white")
+        .rect(50, yPos - 5, tableWidth, 20).fill();
+      doc.fillColor("black")
+        .text(desc, 55, yPos, { width: itemWidth })
+        .text(amount.toFixed(2), 400, yPos, { width: amountWidth, align: "right" });
       yPos += 20;
     });
 
-    doc.moveTo(50, yPos - 10).lineTo(50 + tableWidth, yPos - 10).stroke();
-
-    // Total
+    // Total Row
+    doc.moveTo(50, yPos - 5).lineTo(50 + tableWidth, yPos - 5).stroke();
     doc.fontSize(12).font("Helvetica-Bold")
-      .text("Total Amount Due", 50, yPos, { width: itemWidth })
-      .text(`₹${invoice.totalAmountDue.toFixed(2)}`, 50 + itemWidth, yPos, { width: amountWidth, align: "right" });
+      .text("Total Amount Due", 55, yPos, { width: itemWidth })
+      .text(`₹${invoice.totalAmountDue.toFixed(2)}`, 400, yPos, { width: amountWidth, align: "right" });
 
     // Footer
     doc.moveDown(2).fontSize(10).font("Helvetica-Oblique")
-      .text("Please pay by the due date to avoid late fees.", { align: "center" });
+      .text("Please pay by the due date to avoid late fees.", 50, doc.y, { align: "center" })
+      .text("Contact us: support@rohitcares.com | +91 98781 17788", 50, doc.y + 15, { align: "center" });
+
+    // Border around content
+    doc.rect(40, 110, 532, yPos + 30 - 110).stroke();
 
     doc.end();
 
-    // Return a promise that resolves when the stream finishes
     return new Promise((resolve, reject) => {
       stream.on("finish", () => resolve(filePath));
       stream.on("error", reject);

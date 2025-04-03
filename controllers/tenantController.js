@@ -7,6 +7,7 @@ const path = require("path");
 const fs = require("fs");
 const fsExtra = require("fs-extra");
 const admin = require("firebase-admin");
+const nodemailer = require("nodemailer");
 require("dotenv").config();
 
 // Initialize Firebase Admin SDK
@@ -14,6 +15,17 @@ const serviceAccount = require("../serviceAccountKey.json");
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
+
+// Email transport configuration
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 const addTenant = async (req, res) => {
   try {
@@ -77,7 +89,6 @@ const getAllTenants = async (req, res) => {
     res.status(500).json({ message: "Error fetching tenants" });
   }
 };
-
 
 const deleteTenant = async (req, res) => {
   try {
@@ -419,38 +430,33 @@ const googleLogin = async (req, res) => {
       return res.status(400).json({ message: "ID token is required" });
     }
 
-    // Verify the Google ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
     const { email, name } = decodedToken;
 
-    // Check if tenant exists by email
     let tenant = await Tenant.findOne({ email });
 
     if (!tenant) {
-      // Create a new tenant if not found
       const lastTenant = await Tenant.findOne().sort({ tid: -1 });
       const newTid = lastTenant ? lastTenant.tid + 1 : 1000;
 
       tenant = new Tenant({
         tid: newTid,
-        tname: name || email.split("@")[0], // Use Google name or derive from email
+        tname: name || email.split("@")[0],
         email,
-        mobileNumber: null, // Initially null, to be updated later
-        password: await bcrypt.hash(Math.random().toString(36).slice(-8), 10), // Random password since Google login doesn’t use it
-        isVerified: false, // New tenant starts unverified
+        mobileNumber: null,
+        password: await bcrypt.hash(Math.random().toString(36).slice(-8), 10),
+        isVerified: false,
         firebaseUid: decodedToken.uid,
       });
       await tenant.save();
     }
 
-    // Generate JWT token
     const token = jwt.sign(
       { tenantId: tenant.tid, email: tenant.email, role: "tenant", pgName: tenant.pgName, roomNo: tenant.roomNo },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // Return tenant data and token
     res.status(200).json({
       message: "✅ Google login successful",
       token,
@@ -471,10 +477,11 @@ const googleLogin = async (req, res) => {
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
+
 const updateMobile = async (req, res) => {
   try {
     const { mobileNumber, newPassword } = req.body;
-    const tenantId = req.user.tid; // Extracted from JWT via verifyToken middleware
+    const tenantId = req.user.tid;
 
     if (!mobileNumber) {
       return res.status(400).json({ message: "Mobile number is required" });
@@ -485,22 +492,18 @@ const updateMobile = async (req, res) => {
       return res.status(400).json({ message: "Invalid mobile number format. Must include country code (e.g., +919876543210)" });
     }
 
-    // Check if mobile number is already in use by another tenant
     const existingTenant = await Tenant.findOne({ mobileNumber });
     if (existingTenant && existingTenant.tid !== tenantId) {
       return res.status(400).json({ message: "Mobile number is already associated with another tenant" });
     }
 
-    // Find the tenant
     const tenant = await Tenant.findOne({ tid: tenantId });
     if (!tenant) {
       return res.status(404).json({ message: "Tenant not found" });
     }
 
-    // Update mobile number
     tenant.mobileNumber = mobileNumber;
 
-    // Update password if provided
     if (newPassword) {
       if (newPassword.length < 6) {
         return res.status(400).json({ message: "New password must be at least 6 characters long" });
@@ -511,14 +514,12 @@ const updateMobile = async (req, res) => {
 
     await tenant.save();
 
-    // Generate a new JWT token with updated data
     const token = jwt.sign(
       { tenantId: tenant.tid, email: tenant.email, role: "tenant", pgName: tenant.pgName, roomNo: tenant.roomNo },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // Return updated tenant data and token
     res.status(200).json({
       message: "✅ Profile updated successfully",
       token,
@@ -540,85 +541,22 @@ const updateMobile = async (req, res) => {
   }
 };
 
-const nodemailer = require("nodemailer");
-
-// Email transport configuration
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
-
-
 const updateTenant = async (req, res) => {
   try {
     const { tid } = req.params;
-    const { email, mobileNumber, pgName, pgId, ...updates } = req.body;
+    const updates = req.body;
 
-    const tenant = await Tenant.findOne({ tid });
-    if (!tenant) return res.status(404).json({ message: "Tenant not found" });
-
-    const emailChanged = email && email !== tenant.email;
-    const mobileChanged = mobileNumber && mobileNumber !== tenant.mobileNumber;
-    const pgNameChanged = pgName && pgName !== tenant.pgName;
-
-    if (emailChanged) {
-      tenant.email = email;
-      tenant.emailVerified = false; // Reset to false if email changes
-      tenant.emailOtp = null; // Clear any existing OTP
-    }
-    if (mobileChanged) {
-      tenant.mobileNumber = mobileNumber;
-      tenant.mobileVerified = false; // Reset to false if mobile changes
-    }
-    if (pgNameChanged) {
-      tenant.pgName = pgName;
-      if (pgId) {
-        // If pgId is provided in the request, use it directly
-        tenant.pgId = pgId;
-      } else {
-        // Optional: Fetch pgId from PG model based on pgName as a fallback
-        const pg = await PG.findOne({ name: pgName });
-        if (!pg) return res.status(400).json({ message: "PG not found for the given name" });
-        tenant.pgId = pg.pgId;
-      }
-    }
-    Object.assign(tenant, updates);
-
-    await tenant.save();
-
-    const token = jwt.sign(
-      { tenantId: tenant.tid, email: tenant.email, role: "tenant", pgName: tenant.pgName, roomNo: tenant.roomNo },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+    const tenant = await Tenant.findOneAndUpdate(
+      { tid },
+      { $set: updates },
+      { new: true, runValidators: true }
     );
+    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
 
-    res.json({
-      success: true,
-      message: "Tenant updated successfully",
-      token,
-      tenant: {
-        tid: tenant.tid,
-        tname: tenant.tname,
-        email: tenant.email,
-        mobileNumber: tenant.mobileNumber,
-        pgName: tenant.pgName,
-        pgId: tenant.pgId, // Include pgId in response
-        roomNo: tenant.roomNo,
-        documentsUploaded: tenant.documentsUploaded,
-        idCardUploaded: tenant.idCardUploaded,
-        isVerified: tenant.isVerified,
-        emailVerified: tenant.emailVerified,
-        mobileVerified: tenant.mobileVerified,
-      },
-    });
+    res.status(200).json({ success: true, message: "Tenant updated successfully", tenant });
   } catch (error) {
     console.error("Update Tenant Error:", error);
-    res.status(500).json({ message: "Tenant Already Exist : " + error.message });
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -766,6 +704,7 @@ const verifyOtp = async (req, res) => {
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
+
 const resetTenantBilling = async (req, res) => {
   try {
     const { tid } = req.params;
@@ -790,6 +729,26 @@ const resetTenantBilling = async (req, res) => {
   }
 };
 
+const markTenantAsPaid = async (req, res) => {
+  try {
+    const { tid } = req.params;
+    const tenant = await Tenant.findOneAndUpdate(
+      { tid },
+      {
+        maintenanceAmount: 0,
+        dueElectricityBill: 0,
+        totalAmountDue: 0,
+        $pull: { transactions: { status: "Pending" } }, // Remove pending transactions
+      },
+      { new: true }
+    );
+    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
+    res.status(200).json({ success: true, message: "Tenant marked as paid", tenant });
+  } catch (error) {
+    console.error("Mark as Paid Error:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
 
 module.exports = {
   tenantLogin,
@@ -813,5 +772,5 @@ module.exports = {
   sendEmailOtp,
   verifyEmailOtp,
   resetTenantBilling,
-
+  markTenantAsPaid,
 };

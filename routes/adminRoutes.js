@@ -15,10 +15,14 @@ const {
   deleteDocumentsByPgName,
   denyTenantVerification,
   getTenantsByPgId,
-  rejectTransaction, // Added controller
+  rejectTransaction,
   deleteTenant,
 } = require("../controllers/adminController");
-const { resetTenantBilling } = require("../controllers/tenantController"); // Added from tenantController
+const {
+  resetTenantBilling,
+  markTenantAsPaid,
+  updateTenant,
+} = require("../controllers/tenantController");
 const { verifyTokenAnyAdmin, verifyTokenSuperAdmin } = require("../middleware/authMiddleware");
 
 // Admin routes
@@ -33,9 +37,11 @@ router.get("/tenant/:tid", verifyTokenAnyAdmin, getTenantDocuments);
 router.post("/delete-documents-pg", verifyTokenAnyAdmin, deleteDocumentsByPgName);
 router.post("/deny-tenant/:tid", verifyTokenAnyAdmin, denyTenantVerification);
 router.get("/tenants/pg/:pgId", verifyTokenAnyAdmin, getTenantsByPgId);
-router.delete("/reject-transaction/:transactionId", verifyTokenAnyAdmin, rejectTransaction); // Updated to use adminController
+router.delete("/reject-transaction/:transactionId", verifyTokenAnyAdmin, rejectTransaction);
 router.post("/tenant/reset-billing/:tid", verifyTokenAnyAdmin, resetTenantBilling);
 router.delete("/tenant/:tid", verifyTokenAnyAdmin, deleteTenant);
+router.post("/tenant/mark-as-paid/:tid", verifyTokenAnyAdmin, markTenantAsPaid);
+router.put("/tenant/update/:tid", verifyTokenAnyAdmin, updateTenant);
 
 // Superadmin-only routes
 router.post("/add-admin", verifyTokenSuperAdmin, addAdmin);
