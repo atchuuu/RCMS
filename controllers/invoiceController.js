@@ -20,14 +20,11 @@ const requiredFields = [
   "totalAmountDue",
   "costPerUnit",
 ];
-
-// Generate a single invoice
 const generateInvoice = async (req, res) => {
   try {
     const invoiceData = req.body;
-    console.log("Received invoice data:", invoiceData);
 
-    // Map tenant-specific field names if provided
+    // Map fields if provided in alternate format
     invoiceData.electricityPastMonth = invoiceData.mainLastMonth ?? invoiceData.electricityPastMonth;
     invoiceData.electricityPresentMonth = invoiceData.mainCurrentMonth ?? invoiceData.electricityPresentMonth;
     invoiceData.inverterPastMonth = invoiceData.inverterLastMonth ?? invoiceData.inverterPastMonth;
@@ -36,40 +33,35 @@ const generateInvoice = async (req, res) => {
 
     const missingFields = requiredFields.filter((field) => invoiceData[field] === undefined || invoiceData[field] === null);
     if (missingFields.length) {
+      console.log("Missing fields:", missingFields); // Debug log
       return res.status(400).json({ success: false, message: "Missing required fields", missingFields });
     }
 
-    // Validate tenant existence using numeric tid
     const tenant = await Tenant.findOne({ tid: Number(invoiceData.tid) });
-    if (!tenant) {
-      return res.status(404).json({ success: false, message: "Tenant not found" });
-    }
+    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
 
-    // Ensure tenant data matches invoice data
+    // Update invoiceData with tenant data
     invoiceData.tenantName = tenant.tname;
     invoiceData.roomNo = tenant.roomNo || invoiceData.roomNo;
     invoiceData.pgName = tenant.pgName || invoiceData.pgName;
     invoiceData.tid = tenant.tid;
 
-    // Calculate electricity bill and total amount due
     const mainUnits = invoiceData.electricityPresentMonth - invoiceData.electricityPastMonth;
     const inverterUnits = invoiceData.inverterPresentMonth - invoiceData.inverterPastMonth;
     const totalElectricityUnits = mainUnits + inverterUnits + invoiceData.motorUnits;
     invoiceData.dueElectricityBill = totalElectricityUnits * invoiceData.costPerUnit;
+
+    // Include electricity fine from tenant or request body
+    invoiceData.electricityFine = invoiceData.electricityFine || tenant.electricityFine || 0;
+    invoiceData.dueElectricityBill += invoiceData.electricityFine;
+
     invoiceData.totalAmountDue = invoiceData.rent + invoiceData.dueElectricityBill + invoiceData.maintenanceAmount;
 
-    // Set dueDate to 1st of next month
-    const currentDate = new Date();
-    invoiceData.dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
-
-    // Use current month for storage if monthYear not provided
+    invoiceData.dueDate = new Date(invoiceData.dueDate || new Date().setMonth(new Date().getMonth() + 1));
     invoiceData.monthYear = invoiceData.monthYear || new Date().toLocaleString("default", { month: "long", year: "numeric" }).replace(" ", "");
 
-    // Generate invoice number: pgId + tid + count
     const invoiceCount = await Invoice.countDocuments({ pgId: invoiceData.pgId, tid: invoiceData.tid });
     invoiceData.invoiceNumber = `${invoiceData.pgId}${invoiceData.tid}${invoiceCount + 1}`;
-
-    console.log("Calculated invoice data:", invoiceData);
 
     const pdfPath = await generateInvoicePDF(invoiceData);
     const invoice = new Invoice({
@@ -80,35 +72,86 @@ const generateInvoice = async (req, res) => {
     });
     await invoice.save();
 
-    // Update tenant with latest invoice reference
     tenant.invoices = tenant.invoices || [];
     tenant.invoices.push(invoice._id);
     await tenant.save();
 
-    res.json({
-      success: true,
-      message: "Invoice generated successfully",
-      pdfPath,
-      invoiceId: invoice._id,
-      invoiceNumber: invoice.invoiceNumber,
-    });
+    res.json({ success: true, message: "Invoice generated successfully", pdfPath, invoiceId: invoice._id, invoiceNumber: invoice.invoiceNumber });
   } catch (error) {
     console.error("❌ Error generating invoice:", error);
     res.status(500).json({ success: false, message: "Error generating invoice", error: error.message });
   }
 };
 
-// Get all invoices
-const getAllInvoices = async (req, res) => {
+const calculateInvoices = async (req, res) => {
   try {
-    const invoices = await Invoice.find().lean();
-    res.status(200).json({ success: true, invoices });
+    const { costPerUnit = 10, pgId } = req.body;
+
+    const query = pgId ? { pgId } : {};
+    const tenants = await Tenant.find(query).lean();
+
+    if (!tenants.length) return res.status(404).json({ success: false, message: "No tenants found" });
+
+    const invoices = [];
+    for (const tenant of tenants) {
+      const mainUnits = (tenant.mainCurrentMonth - tenant.mainLastMonth);
+      const inverterUnits = (tenant.inverterCurrentMonth - tenant.inverterLastMonth);
+      const totalElectricityUnits = mainUnits + inverterUnits + (tenant.motorUnits || 0);
+      let dueElectricityBill = totalElectricityUnits * costPerUnit;
+
+      // Include existing fine from tenant
+      const electricityFine = tenant.electricityFine || 0;
+      dueElectricityBill += electricityFine;
+
+      const totalAmountDue = tenant.rent + dueElectricityBill + tenant.maintenanceAmount;
+
+      const invoiceCount = await Invoice.countDocuments({ pgId: tenant.pgId, tid: tenant.tid });
+      const invoiceNumber = `${tenant.pgId}${tenant.tid}${invoiceCount + 1}`;
+
+      const currentDate = new Date();
+      const dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+
+      const invoiceData = {
+        pgId: tenant.pgId,
+        roomNo: tenant.roomNo,
+        pgName: tenant.pgName,
+        tenantName: tenant.tname,
+        tid: tenant.tid,
+        invoiceNumber,
+        dueDate,
+        rent: tenant.rent,
+        maintenanceAmount: tenant.maintenanceAmount,
+        electricityPastMonth: tenant.mainLastMonth,
+        electricityPresentMonth: tenant.mainCurrentMonth,
+        inverterPastMonth: tenant.inverterLastMonth,
+        inverterPresentMonth: tenant.inverterCurrentMonth,
+        motorUnits: tenant.motorUnits || 0,
+        dueElectricityBill,
+        electricityFine, // Pass fine to invoice
+        totalAmountDue,
+        costPerUnit,
+        monthYear: new Date().toLocaleString("default", { month: "long", year: "numeric" }).replace(" ", ""),
+      };
+
+      const pdfPath = await generateInvoicePDF(invoiceData);
+      const invoice = new Invoice({
+        ...invoiceData,
+        pdfPath,
+        status: "Pending",
+        generatedAt: new Date(),
+      });
+      await invoice.save();
+
+      await Tenant.updateOne({ _id: tenant._id }, { $push: { invoices: invoice._id } });
+      invoices.push(invoice);
+    }
+
+    res.json({ success: true, message: "Invoices calculated and generated", invoices });
   } catch (error) {
-    console.error("❌ Error fetching invoices:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    console.error("❌ Error calculating invoices:", error);
+    res.status(500).json({ success: false, message: "Error calculating invoices", error: error.message });
   }
 };
-
 // Get invoices by pgId and roomNo
 const getInvoicesByPgIdAndRoomNo = async (req, res) => {
   try {
@@ -187,76 +230,16 @@ const markInvoiceAsPaid = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
-
-// Calculate and generate invoices for all tenants
-const calculateInvoices = async (req, res) => {
+const getAllInvoices = async (req, res) => {
   try {
-    const { costPerUnit = 10, pgId } = req.body;
-
-    const query = pgId ? { pgId } : {};
-    const tenants = await Tenant.find(query).lean();
-
-    if (!tenants.length) {
-      return res.status(404).json({ success: false, message: "No tenants found" });
-    }
-
-    const invoices = [];
-    for (const tenant of tenants) {
-      const mainUnits = (tenant.mainCurrentMonth - tenant.mainLastMonth);
-      const inverterUnits = (tenant.inverterCurrentMonth - tenant.inverterLastMonth);
-      const totalElectricityUnits = mainUnits + inverterUnits + (tenant.motorUnits || 0);
-      const dueElectricityBill = totalElectricityUnits * costPerUnit;
-      const totalAmountDue = tenant.rent + dueElectricityBill + tenant.maintenanceAmount;
-
-      const invoiceCount = await Invoice.countDocuments({ pgId: tenant.pgId, tid: tenant.tid });
-      const invoiceNumber = `${tenant.pgId}${tenant.tid}${invoiceCount + 1}`;
-
-      const currentDate = new Date();
-      const dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1); // 1st of next month
-
-      const invoiceData = {
-        pgId: tenant.pgId,
-        roomNo: tenant.roomNo,
-        pgName: tenant.pgName,
-        tenantName: tenant.tname,
-        tid: tenant.tid,
-        invoiceNumber,
-        dueDate,
-        rent: tenant.rent,
-        maintenanceAmount: tenant.maintenanceAmount,
-        electricityPastMonth: tenant.mainLastMonth,
-        electricityPresentMonth: tenant.mainCurrentMonth,
-        inverterPastMonth: tenant.inverterLastMonth,
-        inverterPresentMonth: tenant.inverterCurrentMonth,
-        motorUnits: tenant.motorUnits || 0,
-        dueElectricityBill,
-        totalAmountDue,
-        costPerUnit,
-        monthYear: new Date().toLocaleString("default", { month: "long", year: "numeric" }).replace(" ", ""),
-      };
-
-      const pdfPath = await generateInvoicePDF(invoiceData);
-      const invoice = new Invoice({
-        ...invoiceData,
-        pdfPath,
-        status: "Pending",
-        generatedAt: new Date(),
-      });
-      await invoice.save();
-
-      tenant.invoices = tenant.invoices || [];
-      tenant.invoices.push(invoice._id);
-      await Tenant.updateOne({ _id: tenant._id }, { invoices: tenant.invoices });
-
-      invoices.push(invoice);
-    }
-
-    res.json({ success: true, message: "Invoices calculated and generated", invoices });
+    const invoices = await Invoice.find().lean();
+    res.status(200).json({ success: true, invoices });
   } catch (error) {
-    console.error("❌ Error calculating invoices:", error);
-    res.status(500).json({ success: false, message: "Error calculating invoices", error: error.message });
+    console.error("❌ Error fetching invoices:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
+
 
 module.exports = {
   generateInvoice,

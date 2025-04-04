@@ -22,6 +22,7 @@ const {
   resetTenantBilling,
   markTenantAsPaid,
   updateTenant,
+  imposeElectricityFine,
 } = require("../controllers/tenantController");
 const { verifyTokenAnyAdmin, verifyTokenSuperAdmin } = require("../middleware/authMiddleware");
 
@@ -42,6 +43,7 @@ router.post("/tenant/reset-billing/:tid", verifyTokenAnyAdmin, resetTenantBillin
 router.delete("/tenant/:tid", verifyTokenAnyAdmin, deleteTenant);
 router.post("/tenant/mark-as-paid/:tid", verifyTokenAnyAdmin, markTenantAsPaid);
 router.put("/tenant/update/:tid", verifyTokenAnyAdmin, updateTenant);
+router.post("/tenant/impose-electricity-fine/:tid", verifyTokenAnyAdmin, imposeElectricityFine);
 
 // Superadmin-only routes
 router.post("/add-admin", verifyTokenSuperAdmin, addAdmin);

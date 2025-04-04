@@ -16,6 +16,7 @@ const TenantSchema = new mongoose.Schema({
   emailVerified: { type: Boolean, default: false },
   mobileVerified: { type: Boolean, default: false },
   emailOtp: { type: String, default: null },
+  electricityFine: { type: Number, default: 0 }, // New field for fine
   mainLastMonth: { type: Number, default: 0 }, // Added
   mainCurrentMonth: { type: Number, default: 0 }, // Added
   inverterLastMonth: { type: Number, default: 0 }, // Added

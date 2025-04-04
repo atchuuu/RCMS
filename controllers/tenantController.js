@@ -752,7 +752,6 @@ const verifyOtp = async (req, res) => {
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
-
 const resetTenantBilling = async (req, res) => {
   try {
     const { tid } = req.params;
@@ -767,6 +766,7 @@ const resetTenantBilling = async (req, res) => {
     tenant.inverterCurrentMonth = 0;
     tenant.motorUnits = 0;
     tenant.dueElectricityBill = 0;
+    tenant.electricityFine = 0; // Reset fine
     tenant.totalAmountDue = 0;
 
     await tenant.save();
@@ -785,8 +785,9 @@ const markTenantAsPaid = async (req, res) => {
       {
         maintenanceAmount: 0,
         dueElectricityBill: 0,
+        electricityFine: 0, // Reset fine
         totalAmountDue: 0,
-        $pull: { transactions: { status: "Pending" } }, // Remove pending transactions
+        $pull: { transactions: { status: "Pending" } },
       },
       { new: true }
     );
@@ -794,6 +795,25 @@ const markTenantAsPaid = async (req, res) => {
     res.status(200).json({ success: true, message: "Tenant marked as paid", tenant });
   } catch (error) {
     console.error("Mark as Paid Error:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+const imposeElectricityFine = async (req, res) => {
+  try {
+    const { tid } = req.params;
+    const tenant = await Tenant.findOne({ tid });
+    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
+
+    const fine = tenant.dueElectricityBill * 0.1; // 10% fine
+    tenant.electricityFine = (tenant.electricityFine || 0) + fine; // Accumulate fine
+    tenant.dueElectricityBill += fine;
+    tenant.totalAmountDue += fine;
+
+    await tenant.save();
+
+    res.status(200).json({ success: true, message: "10% fine imposed on electricity due", tenant });
+  } catch (error) {
+    console.error("Impose Electricity Fine Error:", error);
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
@@ -821,4 +841,5 @@ module.exports = {
   verifyEmailOtp,
   resetTenantBilling,
   markTenantAsPaid,
+  imposeElectricityFine,
 };
