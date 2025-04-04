@@ -74,6 +74,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/documents", express.static(path.join(__dirname, "documents")));
+app.use("/invoices", express.static(path.join(__dirname, "invoices")));
 
 // Routes
 app.use("/api/tenant", tenantRoutes);

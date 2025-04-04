@@ -3,6 +3,13 @@ const Tenant = require("../models/Tenant");
 const { generateInvoicePDF } = require("../services/invoiceGenerator");
 const path = require("path");
 const fs = require("fs").promises;
+const twilio = require("twilio");
+
+// Twilio configuration
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER; // e.g., "whatsapp:+14155238886"
+const client = twilio(accountSid, authToken);
 
 const requiredFields = [
   "pgId",
@@ -20,11 +27,35 @@ const requiredFields = [
   "totalAmountDue",
   "costPerUnit",
 ];
+
+// Function to send WhatsApp message with PDF
+const sendWhatsAppInvoice = async (tenant, invoiceData, pdfPath) => {
+  try {
+    const monthYear = invoiceData.monthYear;
+    const messageBody = `Hello ${tenant.tname},\nYour ${monthYear} invoice for ${tenant.pgName}, Room ${tenant.roomNo} is attached:\n- Rent: ₹${invoiceData.rent}\n- Maintenance: ₹${invoiceData.maintenanceAmount}\n- Electricity: ₹${invoiceData.dueElectricityBill}\n- Fine: ₹${invoiceData.electricityFine || 0}\n- Total Due: ₹${invoiceData.totalAmountDue}\nDue by: ${new Date(invoiceData.dueDate).toLocaleDateString()}\nPay on time to avoid late fees! Contact us at +91-XXXXXXXXXX for queries.`;
+
+    const pdfUrl = `${process.env.BACKEND_URL}/invoices/${monthYear}/${invoiceData.pgId}/invoice_${invoiceData.roomNo}.pdf`;
+
+    const message = await client.messages.create({
+      from: twilioPhoneNumber,
+      to: `whatsapp:${tenant.mobileNumber}`,
+      body: messageBody,
+      mediaUrl: [pdfUrl], // Attach the PDF
+    });
+
+    console.log(`✅ WhatsApp message sent to ${tenant.mobileNumber}: ${message.sid}`);
+    return { success: true, messageSid: message.sid };
+  } catch (error) {
+    console.error("❌ Error sending WhatsApp message:", error);
+    throw new Error("Failed to send WhatsApp message");
+  }
+};
+
 const generateInvoice = async (req, res) => {
   try {
     const invoiceData = req.body;
+    console.log("Received invoiceData:", invoiceData);
 
-    // Map fields if provided in alternate format
     invoiceData.electricityPastMonth = invoiceData.mainLastMonth ?? invoiceData.electricityPastMonth;
     invoiceData.electricityPresentMonth = invoiceData.mainCurrentMonth ?? invoiceData.electricityPresentMonth;
     invoiceData.inverterPastMonth = invoiceData.inverterLastMonth ?? invoiceData.inverterPastMonth;
@@ -33,14 +64,15 @@ const generateInvoice = async (req, res) => {
 
     const missingFields = requiredFields.filter((field) => invoiceData[field] === undefined || invoiceData[field] === null);
     if (missingFields.length) {
-      console.log("Missing fields:", missingFields); // Debug log
+      console.log("Missing fields:", missingFields);
       return res.status(400).json({ success: false, message: "Missing required fields", missingFields });
     }
 
+    console.log("Fetching tenant with tid:", invoiceData.tid);
     const tenant = await Tenant.findOne({ tid: Number(invoiceData.tid) });
     if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
+    console.log("Found tenant:", tenant);
 
-    // Update invoiceData with tenant data
     invoiceData.tenantName = tenant.tname;
     invoiceData.roomNo = tenant.roomNo || invoiceData.roomNo;
     invoiceData.pgName = tenant.pgName || invoiceData.pgName;
@@ -51,7 +83,6 @@ const generateInvoice = async (req, res) => {
     const totalElectricityUnits = mainUnits + inverterUnits + invoiceData.motorUnits;
     invoiceData.dueElectricityBill = totalElectricityUnits * invoiceData.costPerUnit;
 
-    // Include electricity fine from tenant or request body
     invoiceData.electricityFine = invoiceData.electricityFine || tenant.electricityFine || 0;
     invoiceData.dueElectricityBill += invoiceData.electricityFine;
 
@@ -60,10 +91,14 @@ const generateInvoice = async (req, res) => {
     invoiceData.dueDate = new Date(invoiceData.dueDate || new Date().setMonth(new Date().getMonth() + 1));
     invoiceData.monthYear = invoiceData.monthYear || new Date().toLocaleString("default", { month: "long", year: "numeric" }).replace(" ", "");
 
+    console.log("Counting invoices for pgId:", invoiceData.pgId, "tid:", invoiceData.tid);
     const invoiceCount = await Invoice.countDocuments({ pgId: invoiceData.pgId, tid: invoiceData.tid });
     invoiceData.invoiceNumber = `${invoiceData.pgId}${invoiceData.tid}${invoiceCount + 1}`;
 
+    console.log("Generating PDF with invoiceData:", invoiceData);
     const pdfPath = await generateInvoicePDF(invoiceData);
+    console.log("PDF generated at:", pdfPath);
+
     const invoice = new Invoice({
       ...invoiceData,
       pdfPath,
@@ -71,18 +106,28 @@ const generateInvoice = async (req, res) => {
       generatedAt: new Date(),
     });
     await invoice.save();
+    console.log("Invoice saved:", invoice._id);
 
     tenant.invoices = tenant.invoices || [];
     tenant.invoices.push(invoice._id);
     await tenant.save();
+    console.log("Tenant updated with invoice:", tenant._id);
 
-    res.json({ success: true, message: "Invoice generated successfully", pdfPath, invoiceId: invoice._id, invoiceNumber: invoice.invoiceNumber });
+    console.log("Sending WhatsApp message to:", tenant.mobileNumber);
+    await sendWhatsAppInvoice(tenant, invoiceData, pdfPath);
+
+    res.json({
+      success: true,
+      message: "Invoice generated and sent via WhatsApp",
+      pdfPath,
+      invoiceId: invoice._id,
+      invoiceNumber: invoice.invoiceNumber,
+    });
   } catch (error) {
-    console.error("❌ Error generating invoice:", error);
+    console.error("❌ Error generating invoice:", error.stack);
     res.status(500).json({ success: false, message: "Error generating invoice", error: error.message });
   }
 };
-
 const calculateInvoices = async (req, res) => {
   try {
     const { costPerUnit = 10, pgId } = req.body;
@@ -99,7 +144,6 @@ const calculateInvoices = async (req, res) => {
       const totalElectricityUnits = mainUnits + inverterUnits + (tenant.motorUnits || 0);
       let dueElectricityBill = totalElectricityUnits * costPerUnit;
 
-      // Include existing fine from tenant
       const electricityFine = tenant.electricityFine || 0;
       dueElectricityBill += electricityFine;
 
@@ -127,7 +171,7 @@ const calculateInvoices = async (req, res) => {
         inverterPresentMonth: tenant.inverterCurrentMonth,
         motorUnits: tenant.motorUnits || 0,
         dueElectricityBill,
-        electricityFine, // Pass fine to invoice
+        electricityFine,
         totalAmountDue,
         costPerUnit,
         monthYear: new Date().toLocaleString("default", { month: "long", year: "numeric" }).replace(" ", ""),
@@ -143,16 +187,22 @@ const calculateInvoices = async (req, res) => {
       await invoice.save();
 
       await Tenant.updateOne({ _id: tenant._id }, { $push: { invoices: invoice._id } });
+
+      // Automate WhatsApp sending for batch invoices
+      const tenantDoc = await Tenant.findOne({ tid: tenant.tid }); // Fetch full tenant document
+      await sendWhatsAppInvoice(tenantDoc, invoiceData, pdfPath);
+
       invoices.push(invoice);
     }
 
-    res.json({ success: true, message: "Invoices calculated and generated", invoices });
+    res.json({ success: true, message: "Invoices calculated and sent via WhatsApp", invoices });
   } catch (error) {
     console.error("❌ Error calculating invoices:", error);
     res.status(500).json({ success: false, message: "Error calculating invoices", error: error.message });
   }
 };
-// Get invoices by pgId and roomNo
+
+// Other functions remain unchanged
 const getInvoicesByPgIdAndRoomNo = async (req, res) => {
   try {
     const { pgId, roomNo } = req.params;
@@ -167,7 +217,6 @@ const getInvoicesByPgIdAndRoomNo = async (req, res) => {
   }
 };
 
-// Download invoice PDF
 const downloadInvoice = async (req, res) => {
   try {
     const { pgId, roomNo } = req.params;
@@ -196,7 +245,6 @@ const downloadInvoice = async (req, res) => {
   }
 };
 
-// Mark invoice as paid
 const markInvoiceAsPaid = async (req, res) => {
   try {
     const { invoiceId } = req.params;
@@ -230,6 +278,7 @@ const markInvoiceAsPaid = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
+
 const getAllInvoices = async (req, res) => {
   try {
     const invoices = await Invoice.find().lean();
@@ -239,7 +288,6 @@ const getAllInvoices = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
-
 
 module.exports = {
   generateInvoice,
