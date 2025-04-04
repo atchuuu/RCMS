@@ -540,11 +540,47 @@ const updateMobile = async (req, res) => {
     res.status(500).json({ message: "Server error: " + error.message });
   }
 };
-
 const updateTenant = async (req, res) => {
   try {
     const { tid } = req.params;
     const updates = req.body;
+
+    // Fetch the current tenant data to compare
+    const currentTenant = await Tenant.findOne({ tid });
+    if (!currentTenant) return res.status(404).json({ success: false, message: "Tenant not found" });
+
+    // Reset verification statuses if email or mobile changes
+    if (updates.email && updates.email !== currentTenant.email) {
+      updates.emailVerified = false;
+      updates.emailOtp = null; // Clear any existing OTP
+    }
+    if (updates.mobileNumber && updates.mobileNumber !== currentTenant.mobileNumber) {
+      updates.mobileVerified = false;
+    }
+
+    // Validate email format if provided
+    if (updates.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(updates.email)) {
+        return res.status(400).json({ success: false, message: "Invalid email format" });
+      }
+      const existingEmail = await Tenant.findOne({ email: updates.email, tid: { $ne: tid } });
+      if (existingEmail) {
+        return res.status(400).json({ success: false, message: "Email already in use by another tenant" });
+      }
+    }
+
+    // Validate mobile number format if provided
+    if (updates.mobileNumber) {
+      const mobileRegex = /^\+\d{10,15}$/;
+      if (!mobileRegex.test(updates.mobileNumber)) {
+        return res.status(400).json({ success: false, message: "Invalid mobile number format. Must include country code (e.g., +919876543210)" });
+      }
+      const existingMobile = await Tenant.findOne({ mobileNumber: updates.mobileNumber, tid: { $ne: tid } });
+      if (existingMobile) {
+        return res.status(400).json({ success: false, message: "Mobile number already in use by another tenant" });
+      }
+    }
 
     const tenant = await Tenant.findOneAndUpdate(
       { tid },
@@ -553,7 +589,19 @@ const updateTenant = async (req, res) => {
     );
     if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
 
-    res.status(200).json({ success: true, message: "Tenant updated successfully", tenant });
+    // Generate a new token with updated tenant data
+    const token = jwt.sign(
+      { tenantId: tenant.tid, email: tenant.email, role: "tenant", pgName: tenant.pgName, roomNo: tenant.roomNo },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Tenant updated successfully",
+      tenant,
+      token,
+    });
   } catch (error) {
     console.error("Update Tenant Error:", error);
     res.status(500).json({ success: false, message: "Server error", error: error.message });
